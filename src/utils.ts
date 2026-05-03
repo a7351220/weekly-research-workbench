@@ -115,6 +115,10 @@ export function parseCategories(
 export function buildWeeklyParams(url: URL): WeeklyQueryParams {
   const includeTaiwan = parseBoolean(url.searchParams.get("includeTaiwan"), false);
   const categories = parseCategories(url.searchParams.get("categories"), includeTaiwan);
+  const sources = parseSourceNames(
+    url.searchParams.get("sources"),
+    url.searchParams.has("sources"),
+  );
 
   return {
     days: parseNumber(url.searchParams.get("days"), 7, { min: 1, max: 30 }),
@@ -124,6 +128,7 @@ export function buildWeeklyParams(url: URL): WeeklyQueryParams {
     }),
     includeTaiwan,
     categories,
+    sources,
     keyword: normalizeKeyword(url.searchParams.get("keyword")),
     maxItemsPerCategory: parseNumber(
       url.searchParams.get("maxItemsPerCategory"),
@@ -131,6 +136,23 @@ export function buildWeeklyParams(url: URL): WeeklyQueryParams {
       { min: 1, max: 100 },
     ),
   };
+}
+
+export function parseSourceNames(value: string | null, present = false): string[] | null {
+  if (!present) {
+    return null;
+  }
+
+  if (value === null || value.trim() === "") {
+    return [];
+  }
+
+  const parsed = value
+    .split(",")
+    .map((part) => decodeURIComponent(part).trim())
+    .filter(Boolean);
+
+  return parsed.length > 0 ? Array.from(new Set(parsed)) : null;
 }
 
 export function normalizeKeyword(value: string | null): string | null {

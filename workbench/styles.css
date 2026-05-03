@@ -120,6 +120,11 @@ a {
   grid-column: span 2;
 }
 
+.control-group-sources {
+  grid-column: span 5;
+  min-width: 0;
+}
+
 .checkbox-group {
   justify-content: flex-end;
 }
@@ -156,6 +161,55 @@ a {
   grid-column: span 6;
   display: flex;
   gap: 8px;
+}
+
+.small {
+  padding: 6px 8px;
+}
+
+.source-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.source-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.sources-picker {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 8px;
+  max-height: 168px;
+  overflow: auto;
+}
+
+.source-group + .source-group {
+  margin-top: 10px;
+}
+
+.source-group-title {
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-transform: lowercase;
+}
+
+.source-group-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
 }
 
 button {

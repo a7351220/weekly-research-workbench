@@ -1,4 +1,4 @@
-const STORAGE_KEY = "weekly-research-workbench:v1";
+const STORAGE_KEY = "weekly-research-workbench:v2";
 const DEFAULT_LAYOUT = {
   topicsWidth: 320,
   contextWidth: 420,
@@ -17,6 +17,7 @@ const state = {
   selectedArticleUrl: null,
   contexts: {},
   selections: {},
+  availableSources: [],
   filters: loadState(),
   sort: {
     topics: "story",
@@ -34,6 +35,10 @@ const elements = {
   categories: document.querySelector("#categories"),
   keyword: document.querySelector("#keyword"),
   includeTaiwan: document.querySelector("#include-taiwan"),
+  sourcesPicker: document.querySelector("#sources-picker"),
+  sourcesSelectAll: document.querySelector("#sources-select-all"),
+  sourcesClearAll: document.querySelector("#sources-clear-all"),
+  sourcesSelectDefault: document.querySelector("#sources-select-default"),
   status: document.querySelector("#status"),
   pinnedCount: document.querySelector("#pinned-count"),
   selectionCount: document.querySelector("#selection-count"),
@@ -68,6 +73,7 @@ function init() {
   applyLayoutFromState();
   bindEvents();
   updateSelectionCount();
+  loadSources();
 }
 
 function bindEvents() {
@@ -100,6 +106,10 @@ function bindEvents() {
     renderArticles();
   });
   elements.toggleApiBase.addEventListener("click", toggleApiBaseVisibility);
+  elements.sourcesSelectAll.addEventListener("click", () => setAllSources(true));
+  elements.sourcesClearAll.addEventListener("click", () => setAllSources(false));
+  elements.sourcesSelectDefault.addEventListener("click", () => setDefaultSources());
+  elements.apiBase.addEventListener("change", loadSources);
   bindResizer(elements.resizeTopics, "topics");
   bindResizer(elements.resizeContext, "context");
 
@@ -139,6 +149,122 @@ function hydrateControls() {
   elements.selectedOnly.checked = state.sort.selectedOnly;
 }
 
+async function loadSources() {
+  const apiBase = trimSlash(elements.apiBase.value);
+  if (!apiBase) {
+    elements.sourcesPicker.textContent = "set api_base first";
+    return;
+  }
+
+  try {
+    const response = await fetch(`${apiBase}/sources`);
+    if (!response.ok) {
+      throw new Error(`sources failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    state.availableSources = normalizeSourcesPayload(payload);
+    if (!state.filters?.selectedSources?.length) {
+      state.filters = { ...(state.filters || {}), selectedSources: state.availableSources.map((s) => s.name) };
+    }
+    renderSourcesPicker();
+  } catch (error) {
+    elements.sourcesPicker.textContent = error instanceof Error ? error.message : "failed to load sources";
+  }
+}
+
+function normalizeSourcesPayload(payload) {
+  const rows = [];
+  const categories = payload?.categories || {};
+  for (const [category, sources] of Object.entries(categories)) {
+    for (const source of sources || []) {
+      rows.push({
+        category,
+        name: source.name,
+        url: source.url,
+        enabled: Boolean(source.enabled),
+        priority: source.priority || 0,
+        sourceType: source.sourceType || "media",
+      });
+    }
+  }
+  return rows;
+}
+
+function renderSourcesPicker() {
+  const selected = new Set(state.filters?.selectedSources || state.availableSources.map((s) => s.name));
+  if (!state.availableSources.length) {
+    elements.sourcesPicker.textContent = "no sources";
+    return;
+  }
+
+  const groups = groupBy(state.availableSources, (item) => item.category);
+  const html = Object.entries(groups)
+    .map(([category, items]) => {
+      const rows = items
+        .map((source) => `
+          <label class="source-pill">
+            <input type="checkbox" class="source-checkbox" value="${escapeHtml(source.name)}" ${selected.has(source.name) ? "checked" : ""} />
+            <span>${escapeHtml(source.name)}</span>
+          </label>`)
+        .join("");
+      return `
+        <div class="source-group">
+          <div class="source-group-title">${category}</div>
+          <div class="source-group-grid">${rows}</div>
+        </div>`;
+    })
+    .join("");
+
+  elements.sourcesPicker.innerHTML = html;
+  elements.sourcesPicker.querySelectorAll('.source-checkbox').forEach((input) => {
+    input.addEventListener('change', () => {
+      state.filters = { ...(state.filters || {}), selectedSources: getSelectedSourceNames() };
+      persistControls();
+    });
+  });
+}
+
+function getSelectedSourceNames() {
+  const checked = Array.from(elements.sourcesPicker.querySelectorAll('.source-checkbox:checked'));
+  return checked.map((input) => input.value);
+}
+
+function setAllSources(checked) {
+  elements.sourcesPicker.querySelectorAll('.source-checkbox').forEach((input) => {
+    input.checked = checked;
+  });
+  state.filters = { ...(state.filters || {}), selectedSources: getSelectedSourceNames() };
+  persistControls();
+}
+
+function setDefaultSources() {
+  const defaults = new Set(state.availableSources.filter((s) => s.enabled).map((s) => s.name));
+  elements.sourcesPicker.querySelectorAll('.source-checkbox').forEach((input) => {
+    input.checked = defaults.has(input.value);
+  });
+  state.filters = { ...(state.filters || {}), selectedSources: getSelectedSourceNames() };
+  persistControls();
+}
+
+function groupBy(items, keyFn) {
+  const out = {};
+  for (const item of items) {
+    const key = keyFn(item);
+    if (!out[key]) out[key] = [];
+    out[key].push(item);
+  }
+  return out;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function persistControls() {
   const snapshot = {
     apiBase: elements.apiBase.value.trim(),
@@ -148,6 +274,7 @@ function persistControls() {
     categories: elements.categories.value,
     keyword: elements.keyword.value,
     includeTaiwan: elements.includeTaiwan.checked,
+    selectedSources: getSelectedSourceNames(),
     selections: state.selections,
     topicSort: state.sort.topics,
     articleSort: state.sort.articles,
@@ -252,8 +379,10 @@ async function handleLoadWeekly() {
 
     const categories = elements.categories.value.trim();
     const keyword = elements.keyword.value.trim();
+    const selectedSources = getSelectedSourceNames();
     if (categories) params.set("categories", categories);
     if (keyword) params.set("keyword", keyword);
+    params.set("sources", selectedSources.join(","));
 
     const response = await fetch(`${trimSlash(elements.apiBase.value)}/weekly?${params.toString()}`);
     if (!response.ok) {
@@ -869,6 +998,7 @@ function buildExportPayload() {
       maxItemsPerCategory: Number(elements.maxItems.value),
       includeTaiwan: elements.includeTaiwan.checked,
       categories: elements.categories.value.trim() || null,
+      sources: getSelectedSourceNames(),
       keyword: elements.keyword.value.trim() || null,
     },
     pinnedTopics,
@@ -1090,11 +1220,4 @@ function trimSlash(value) {
 
 function unique(values) {
   return Array.from(new Set(values));
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }

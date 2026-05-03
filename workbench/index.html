@@ -61,6 +61,17 @@
           <label for="keyword">keyword</label>
           <input id="keyword" type="text" placeholder="optional" value="" />
         </div>
+        <div class="control-group control-group-sources">
+          <div class="source-header-row">
+            <label>sources</label>
+            <div class="source-actions">
+              <button id="sources-select-all" type="button" class="secondary small">all</button>
+              <button id="sources-clear-all" type="button" class="secondary small">none</button>
+              <button id="sources-select-default" type="button" class="secondary small">default</button>
+            </div>
+          </div>
+          <div id="sources-picker" class="sources-picker">loading sources...</div>
+        </div>
         <div class="control-group checkbox-group">
           <label for="include-taiwan">include_taiwan</label>
           <input id="include-taiwan" type="checkbox" />

@@ -467,6 +467,12 @@ components:
               items:
                 type: string
                 enum: [crypto, us_stocks_macro, ai, taiwan_stocks]
+            sources:
+              type:
+                - array
+                - "null"
+              items:
+                type: string
             keyword:
               type:
                 - string
@@ -478,6 +484,7 @@ components:
             - limitPerSource
             - includeTaiwan
             - categories
+            - sources
             - keyword
             - maxItemsPerCategory
         summary:
@@ -583,6 +590,12 @@ paths:
             type: string
             example: crypto,us_stocks_macro,ai
           description: Comma-separated category list.
+        - in: query
+          name: sources
+          schema:
+            type: string
+            example: CoinDesk,OpenAI News
+          description: Comma-separated source names. Send an empty value to fetch no sources.
         - in: query
           name: keyword
           schema:

@@ -1,6 +1,21 @@
 import { test, expect } from '@playwright/test';
 
 test('workbench smoke', async ({ page }) => {
+  await page.route('**/sources', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        categories: {
+          crypto: [{ name: 'CoinDesk', url: 'https://example.com/coindesk.xml', enabled: true, priority: 70, sourceType: 'media' }],
+          us_stocks_macro: [{ name: 'Nasdaq', url: 'https://example.com/nasdaq.xml', enabled: true, priority: 80, sourceType: 'media' }],
+          ai: [{ name: 'OpenAI News', url: 'https://example.com/openai.xml', enabled: true, priority: 100, sourceType: 'official' }],
+          taiwan_stocks: [{ name: 'CNA Finance', url: 'https://example.com/cna.xml', enabled: false, priority: 74, sourceType: 'media' }],
+        },
+      }),
+    });
+  });
+
   await page.route('**/weekly?**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -189,10 +204,10 @@ test('workbench smoke', async ({ page }) => {
   await page.selectOption('#topic-sort', 'co');
   await page.click('#tab-raw');
   const rawCount = await page.locator('#topics-list .topic-item').count();
-  if (rawCount > 0) await page.locator('#topics-list .topic-item').first().click();
+  if (rawCount > 0) await page.locator('#topics-list .topic-item').first().click({ force: true });
 
   await page.click('#tab-bundles');
-  await page.locator('#topics-list .topic-item').first().click();
+  await page.locator('#topics-list .topic-item').first().click({ force: true });
   await page.locator('.topic-pinned').first().check();
   await page.locator('.topic-note').first().fill('priority topic');
 

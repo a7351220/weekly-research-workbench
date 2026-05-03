@@ -28,6 +28,7 @@ export interface WeeklyQueryParams {
   limitPerSource: number;
   includeTaiwan: boolean;
   categories: Category[];
+  sources: string[] | null;
   keyword: string | null;
   maxItemsPerCategory: number;
 }
@@ -87,6 +88,7 @@ export interface WeeklyResponse {
     limitPerSource: number;
     includeTaiwan: boolean;
     categories: Category[];
+    sources: string[] | null;
     keyword: string | null;
     maxItemsPerCategory: number;
   };

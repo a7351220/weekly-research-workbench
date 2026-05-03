@@ -122,7 +122,7 @@ function handleSources(): Response {
 
 async function handleWeekly(url: URL, env: Env): Promise<Response> {
   const params = buildWeeklyParams(url);
-  const selectedSources = selectSources(params.categories, params.includeTaiwan);
+  const selectedSources = selectSources(params.categories, params.includeTaiwan, params.sources);
   const results = await Promise.all(selectedSources.map((source) => fetchFeed(source, params)));
   let editorialCache = await loadEditorialCache(env);
   if (!editorialCache && hasEditorialSecrets(env)) {
@@ -171,6 +171,7 @@ async function handleWeekly(url: URL, env: Env): Promise<Response> {
       limitPerSource: params.limitPerSource,
       includeTaiwan: params.includeTaiwan,
       categories: params.categories,
+      sources: params.sources,
       keyword: params.keyword,
       maxItemsPerCategory: params.maxItemsPerCategory,
     },
@@ -211,13 +212,24 @@ async function handleSourceContext(url: URL): Promise<Response> {
   return jsonResponse(response);
 }
 
-function selectSources(categories: Category[], includeTaiwan: boolean): FeedSource[] {
+function selectSources(
+  categories: Category[],
+  includeTaiwan: boolean,
+  selectedSourceNames: string[] | null,
+): FeedSource[] {
   const allowed = new Set(categories);
+  const selected = selectedSourceNames ? new Set(selectedSourceNames) : null;
   return SOURCES.filter((source) => {
     if (source.category === "taiwan_stocks" && !includeTaiwan) {
       return false;
     }
-    return allowed.has(source.category);
+    if (!allowed.has(source.category)) {
+      return false;
+    }
+    if (selected && !selected.has(source.name)) {
+      return false;
+    }
+    return true;
   });
 }
 
