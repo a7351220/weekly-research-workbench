@@ -130,6 +130,33 @@ const HIGH_SIGNAL_ENTITY_SET = new Set([
   "etf",
 ]);
 
+const TAIWAN_LOCAL_HARD_SOURCE_SET = new Set([
+  "FSC Press Releases",
+  "TWSE News",
+  "TPEx Press Releases",
+  "MOPS Material Information 201001",
+  "MOPS Material Information 201002",
+  "MOPS Material Information 201003",
+  "CNA Finance",
+  "MoneyDJ Finance News",
+]);
+
+const TAIWAN_LOCAL_STORY_SOURCE_SET = new Set([
+  "CNA Technology",
+  "Yahoo Taiwan Stock News",
+  "Yahoo Taiwan Stock News Feed",
+  "Yahoo Taiwan Stock Research",
+  "Yahoo Taiwan Funds News",
+  "Cnyes Taiwan Stock News",
+  "UDN Taiwan Stock News",
+  "UDN Taiwan Industry News",
+]);
+
+const TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET = new Set([
+  "DIGITIMES Daily",
+  "TechNews Finance",
+]);
+
 export function scoreBaseEditorial(item: FeedItem): {
   score: number;
   signals: string[];
@@ -299,6 +326,30 @@ export function scoreBaseEditorial(item: FeedItem): {
   if (item.category === "crypto" && (topicTags.has("policy") || topicTags.has("fund_flows"))) {
     score += 16;
     signals.add("crypto_weekly_fit");
+  }
+
+  if (item.category === "taiwan_stocks") {
+    if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
+      score += 12;
+      signals.add("taiwan_hard_source_fit");
+    } else if (TAIWAN_LOCAL_STORY_SOURCE_SET.has(item.source)) {
+      score += 6;
+      signals.add("taiwan_story_source_fit");
+    } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
+      score += 3;
+      signals.add("taiwan_industry_context_fit");
+    }
+
+    if (
+      TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source) &&
+      !Array.from(topicEntities).some((entity) =>
+        ["tsmc", "honhai", "liteon", "mediatek", "nvidia", "amd", "intel"].includes(entity),
+      ) &&
+      !/(台積電|鴻海|廣達|緯創|緯穎|技嘉|英業達|台達電|光寶科|欣興|南電|聯發科|創意|世芯)/i.test(text)
+    ) {
+      score -= 6;
+      signals.add("penalty:taiwan_context_not_localized");
+    }
   }
 
   if (
@@ -521,6 +572,16 @@ function scoreSourceQuality(
     )
   ) {
     score += 5;
+  }
+
+  if (item.category === "taiwan_stocks") {
+    if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
+      score += 10;
+    } else if (TAIWAN_LOCAL_STORY_SOURCE_SET.has(item.source)) {
+      score += 4;
+    } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
+      score -= 6;
+    }
   }
 
   return Math.min(100, Math.max(0, score));
