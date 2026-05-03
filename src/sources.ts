@@ -185,6 +185,15 @@ export const SOURCES: FeedSource[] = [
     sourceType: "research",
   },
   {
+    name: "iThome News",
+    url: "https://www.ithome.com.tw/rss",
+    category: "ai",
+    enabledByDefault: true,
+    priority: 66,
+    sourceType: "media",
+    articleHosts: ["www.ithome.com.tw", "ithome.com.tw"],
+  },
+  {
     name: "FSC Press Releases",
     url: "https://www.fsc.gov.tw/RSS/Messages?serno=201202290016&language=english",
     category: "taiwan_stocks",

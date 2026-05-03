@@ -191,6 +191,7 @@ Default categories:
 - Google AI Blog — `https://blog.google/technology/ai/rss/`
 - Google DeepMind — `https://deepmind.google/blog/rss.xml`
 - BAIR Blog — `https://bair.berkeley.edu/blog/feed.xml`
+- iThome News — `https://www.ithome.com.tw/rss`
 
 Optional category:
 

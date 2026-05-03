@@ -902,7 +902,11 @@ export function buildTopicClusters(items: FeedItem[]): TopicCluster[] {
 
 export function buildNarrativeBundles(clusters: TopicCluster[]): NarrativeBundle[] {
   const filtered = clusters
-    .filter((cluster) => cluster.totalEditorialScore >= 100)
+    .filter((cluster) =>
+      cluster.category === "taiwan_stocks"
+        ? cluster.totalEditorialScore >= 70
+        : cluster.totalEditorialScore >= 100,
+    )
     .sort((a, b) => b.totalEditorialScore - a.totalEditorialScore);
   const visited = new Set<string>();
   const bundles: NarrativeBundle[] = [];
@@ -929,7 +933,7 @@ export function buildNarrativeBundles(clusters: TopicCluster[]): NarrativeBundle
 
     const component = [cluster, ...related];
 
-    if (component.length < 2) {
+    if (component.length < 2 && !canFormStandaloneBundle(cluster)) {
       continue;
     }
 
@@ -1014,6 +1018,10 @@ function scoreClusterRelation(a: TopicCluster, b: TopicCluster): number {
     score += 3;
   }
 
+  if (isTaiwanStoryBridge(a, b)) {
+    score += 4;
+  }
+
   return score;
 }
 
@@ -1033,6 +1041,7 @@ function buildNarrativeBundle(component: TopicCluster[]): NarrativeBundle {
     component.map((cluster) => cluster.eventType).filter(Boolean) as string[],
   );
   const entities = unique(component.flatMap((cluster) => cluster.topicEntities));
+  const topicTags = unique(component.flatMap((cluster) => cluster.topicTags));
   const clusterKeys = ranked.map((cluster) => cluster.clusterKey);
   const coreClusterKeys = coreClusters.map((cluster) => cluster.clusterKey);
   const relatedClusterKeys = relatedClusters.map((cluster) => cluster.clusterKey);
@@ -1045,7 +1054,7 @@ function buildNarrativeBundle(component: TopicCluster[]): NarrativeBundle {
   );
   const itemCount = component.reduce((sum, cluster) => sum + cluster.itemCount, 0);
   const sourceCount = unique(component.flatMap((cluster) => cluster.sources)).length;
-  const bundleKind = deriveBundleKind(component, categories, marketThemes, entities);
+  const bundleKind = deriveBundleKind(component, categories, marketThemes, entities, topicTags);
 
   return {
     bundleKey: bundleKind.key,
@@ -1075,6 +1084,7 @@ function deriveBundleKind(
   categories: Category[],
   marketThemes: string[],
   entities: string[],
+  topicTags: string[],
 ): { key: string; title: string; summary: string; angle: string } {
   const has = (value: string) => marketThemes.includes(value) || entities.includes(value);
 
@@ -1090,6 +1100,39 @@ function deriveBundleKind(
       summary: "把大型科技股財報、指數反應、贏家輸家分化放在一起，才能看出市場本週真正獎勵的是誰。",
       angle: "先講財報結果，再講股價與指數怎麼重排順序，最後講哪些公司成了本週的相對贏家與輸家。",
     };
+  }
+
+  if (categories.length === 1 && categories[0] === "taiwan_stocks") {
+    if (
+      topicTags.includes("taiwan_ai_supply_chain") ||
+      topicTags.includes("taiwan_data_center") ||
+      topicTags.includes("taiwan_semis")
+    ) {
+      return {
+        key: "taiwan-ai-supply-chain",
+        title: "台股 AI 供應鏈與資料中心受惠包",
+        summary: "把台廠 AI 供應鏈、半導體、資料中心與受惠鏈條放在一起，才能看出台股本週真正被市場重估的是哪些公司。",
+        angle: "先講受惠鏈條，再講哪些公司被點名，最後補上背後的算力、資料中心與資本支出主線。",
+      };
+    }
+
+    if (topicTags.includes("taiwan_etf_flows")) {
+      return {
+        key: "taiwan-etf-flows",
+        title: "台股 ETF 與資金輪動包",
+        summary: "把 ETF、配息、高股息與資金輪動題放在一起，才能看出台股資金本週實際往哪裡集中。",
+        angle: "先講資金往哪流，再講哪些產品和族群最受惠。",
+      };
+    }
+
+    if (topicTags.includes("taiwan_policy")) {
+      return {
+        key: "taiwan-policy-disclosure",
+        title: "台股政策與公告主線包",
+        summary: "把證交所、櫃買中心、重大訊息與制度更新放在一起，才能看出台股本週的正式揭露主線。",
+        angle: "先講制度或公告，再補上可能影響的公司與產業。",
+      };
+    }
   }
 
   if (
@@ -1281,6 +1324,32 @@ function isCryptoAiBridge(a: TopicCluster, b: TopicCluster): boolean {
     themes.includes("ai_capex") ||
     themes.includes("ai_chip_reaction")
   ) && ["nvidia", "amd", "intel", "bitcoin"].some((entity) => entities.has(entity));
+}
+
+function isTaiwanStoryBridge(a: TopicCluster, b: TopicCluster): boolean {
+  if (!(a.category === "taiwan_stocks" && b.category === "taiwan_stocks")) {
+    return false;
+  }
+
+  const sharedTaiwanTags = intersectCount(
+    a.topicTags.filter((tag) => tag.startsWith("taiwan_")),
+    b.topicTags.filter((tag) => tag.startsWith("taiwan_")),
+  );
+
+  return sharedTaiwanTags >= 1 || intersectCount(a.topicEntities, b.topicEntities) >= 1;
+}
+
+function canFormStandaloneBundle(cluster: TopicCluster): boolean {
+  if (cluster.category !== "taiwan_stocks") {
+    return false;
+  }
+
+  return (
+    cluster.totalEditorialScore >= 90 &&
+    cluster.topicTags.some((tag) =>
+      ["taiwan_ai_supply_chain", "taiwan_semis", "taiwan_etf_flows", "taiwan_policy", "taiwan_data_center"].includes(tag),
+    )
+  );
 }
 
 function intersectCount(a: string[], b: string[]): number {
