@@ -209,6 +209,14 @@ export const SOURCES: FeedSource[] = [
     sourceType: "media",
   },
   {
+    name: "MoneyDJ Finance News",
+    url: "https://www.moneydj.com/kmdj/RssCenter.aspx?svc=NW&fno=1&arg=X0000000",
+    category: "taiwan_stocks",
+    enabledByDefault: false,
+    priority: 68,
+    sourceType: "media",
+  },
+  {
     name: "Yahoo Taiwan Stock News",
     url: "https://tw.stock.yahoo.com/rss?category=tw-market",
     category: "taiwan_stocks",

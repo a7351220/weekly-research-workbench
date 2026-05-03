@@ -199,6 +199,7 @@ Optional category:
 - FSC Press Releases — `https://www.fsc.gov.tw/RSS/Messages?serno=201202290016&language=english`
 - TWSE News — `https://www.twse.com.tw/rwd/zh/news/feed?type=rss`
 - CNA Finance — `https://feeds.feedburner.com/rsscna/finance`
+- MoneyDJ Finance News — `https://www.moneydj.com/kmdj/RssCenter.aspx?svc=NW&fno=1&arg=X0000000`
 - Yahoo Taiwan Stock News — `https://tw.stock.yahoo.com/rss?category=tw-market`
 - Cnyes Taiwan Stock News (HTML feed parser) — `https://news.cnyes.com/news/cat/tw_stock_news`
 
