@@ -1266,6 +1266,34 @@ function partitionBundleClusters(
 }
 
 function canJoinBundle(anchor: TopicCluster, candidate: TopicCluster): boolean {
+  if (anchor.category === "taiwan_stocks" && candidate.category === "taiwan_stocks") {
+    const anchorIsAi =
+      anchor.topicTags.includes("taiwan_ai_supply_chain") ||
+      anchor.topicTags.includes("taiwan_data_center") ||
+      (anchor.topicTags.includes("taiwan_semis") && anchor.topicTags.includes("ai_infra"));
+    const candidateIsAi =
+      candidate.topicTags.includes("taiwan_ai_supply_chain") ||
+      candidate.topicTags.includes("taiwan_data_center") ||
+      (candidate.topicTags.includes("taiwan_semis") && candidate.topicTags.includes("ai_infra"));
+    const anchorIsEtf = anchor.topicTags.includes("taiwan_etf_flows");
+    const candidateIsEtf = candidate.topicTags.includes("taiwan_etf_flows");
+    const anchorIsPolicy =
+      anchor.topicTags.includes("taiwan_policy") || anchor.topicTags.includes("taiwan_admin_notice");
+    const candidateIsPolicy =
+      candidate.topicTags.includes("taiwan_policy") || candidate.topicTags.includes("taiwan_admin_notice");
+
+    if ((anchorIsAi && candidateIsEtf) || (anchorIsEtf && candidateIsAi)) {
+      return false;
+    }
+
+    if (
+      (anchorIsAi && candidateIsPolicy && !candidateIsAi) ||
+      (candidateIsAi && anchorIsPolicy && !anchorIsAi)
+    ) {
+      return false;
+    }
+  }
+
   if (anchor.category === "crypto" && candidate.marketTheme === "big_tech_earnings") {
     return false;
   }
@@ -1361,6 +1389,29 @@ function isCryptoAiBridge(a: TopicCluster, b: TopicCluster): boolean {
 
 function isTaiwanStoryBridge(a: TopicCluster, b: TopicCluster): boolean {
   if (!(a.category === "taiwan_stocks" && b.category === "taiwan_stocks")) {
+    return false;
+  }
+
+  const aIsAi =
+    a.topicTags.includes("taiwan_ai_supply_chain") ||
+    a.topicTags.includes("taiwan_data_center") ||
+    (a.topicTags.includes("taiwan_semis") && a.topicTags.includes("ai_infra"));
+  const bIsAi =
+    b.topicTags.includes("taiwan_ai_supply_chain") ||
+    b.topicTags.includes("taiwan_data_center") ||
+    (b.topicTags.includes("taiwan_semis") && b.topicTags.includes("ai_infra"));
+  const aIsEtf = a.topicTags.includes("taiwan_etf_flows");
+  const bIsEtf = b.topicTags.includes("taiwan_etf_flows");
+  const aIsPolicy =
+    a.topicTags.includes("taiwan_policy") || a.topicTags.includes("taiwan_admin_notice");
+  const bIsPolicy =
+    b.topicTags.includes("taiwan_policy") || b.topicTags.includes("taiwan_admin_notice");
+
+  if ((aIsAi && bIsEtf) || (aIsEtf && bIsAi)) {
+    return false;
+  }
+
+  if ((aIsAi && bIsPolicy && !bIsAi) || (bIsAi && aIsPolicy && !aIsAi)) {
     return false;
   }
 
