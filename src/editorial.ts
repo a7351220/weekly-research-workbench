@@ -101,6 +101,7 @@ const LOW_SIGNAL_PATTERNS: Array<[string, RegExp, number]> = [
   ["clickbait_analysis", /\b(can't ignore|incredible news|you should buy|buy now|just delivered|one of the .* biggest decliners today)\b/i, -20],
   ["generic_trading_list", /\b(pre-market most active|after hours most active|dow movers|daily dividend report|bull and bear of the day|how long have you owned a stock)\b/i, -28],
   ["generic_investing_advice", /\b(should you buy|here's why|strong momentum stock|smartest growth stock|buy the dip|worth .* valuation)\b/i, -18],
+  ["taiwan_etf_admin_notice", /(掛牌上市|融資融券|募集發行|專區上線|了解ETF配息來源|收益平準金制度)/i, -26],
 ];
 
 const HIGH_SIGNAL_ENTITY_SET = new Set([
@@ -180,6 +181,10 @@ function isTaiwanSupplyChainStory(
   }
 
   return false;
+}
+
+function isTaiwanAdministrativeFundNotice(text: string): boolean {
+  return /(掛牌上市|融資融券|募集發行|專區上線|了解ETF配息來源|收益平準金制度)/i.test(text);
 }
 
 export function scoreBaseEditorial(item: FeedItem): {
@@ -359,6 +364,7 @@ export function scoreBaseEditorial(item: FeedItem): {
       Array.from(topicEntities),
       Array.from(topicTags),
     );
+    const isAdministrativeFundNotice = isTaiwanAdministrativeFundNotice(text);
 
     if (/(台積電|聯發科|世芯|創意|日月光|京元電|2奈米|先進封裝|半導體)/i.test(text)) {
       topicTags.add("taiwan_semis");
@@ -377,6 +383,11 @@ export function scoreBaseEditorial(item: FeedItem): {
     }
     if (isSupplyChainStory) {
       topicTags.add("taiwan_ai_supply_chain");
+    }
+    if (isAdministrativeFundNotice) {
+      topicTags.add("taiwan_admin_notice");
+      score -= 18;
+      signals.add("penalty:taiwan_admin_notice");
     }
 
     if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
@@ -698,6 +709,8 @@ function scoreMarketReaction(
 ): number {
   let score = 0;
   const text = `${item.title} ${item.description}`;
+  const isAdministrativeFundNotice =
+    item.category === "taiwan_stocks" && isTaiwanAdministrativeFundNotice(text);
 
   if (topicTags.includes("price_action")) {
     score += 25;
@@ -728,6 +741,10 @@ function scoreMarketReaction(
     ["apple", "alphabet", "microsoft", "amazon", "meta", "nvidia", "intel", "amd", "strategy", "bitcoin", "ethereum", "sp500", "nasdaq"].includes(majorEntity)
   ) {
     score += 10;
+  }
+
+  if (isAdministrativeFundNotice) {
+    score -= 22;
   }
 
   return Math.min(100, Math.max(0, score));
@@ -1341,6 +1358,10 @@ function isTaiwanStoryBridge(a: TopicCluster, b: TopicCluster): boolean {
 
 function canFormStandaloneBundle(cluster: TopicCluster): boolean {
   if (cluster.category !== "taiwan_stocks") {
+    return false;
+  }
+
+  if (cluster.topicTags.includes("taiwan_admin_notice")) {
     return false;
   }
 
