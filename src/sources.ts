@@ -299,6 +299,17 @@ export const SOURCES: FeedSource[] = [
     fetchMode: "html",
     parser: "udn_tw_stock_html",
   },
+  {
+    name: "TPEx Press Releases",
+    url: "https://www.tpex.org.tw/www/zh-tw/news/list",
+    category: "taiwan_stocks",
+    enabledByDefault: true,
+    priority: 92,
+    sourceType: "official",
+    fetchMode: "api-json",
+    parser: "tpex_press_json",
+    articleHosts: ["www.tpex.org.tw", "tpex.org.tw"],
+  },
 ];
 
 export function getSourcesByCategory(includeTaiwan: boolean): Record<Category, FeedSource[]> {

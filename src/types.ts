@@ -19,8 +19,8 @@ export interface FeedSource {
   enabledByDefault: boolean;
   priority: number;
   sourceType: "official" | "media" | "research";
-  fetchMode?: "rss" | "html" | "rss-big5";
-  parser?: "cnyes_tw_stock_html" | "udn_tw_stock_html";
+  fetchMode?: "rss" | "html" | "rss-big5" | "api-json";
+  parser?: "cnyes_tw_stock_html" | "udn_tw_stock_html" | "tpex_press_json";
   articleHosts?: string[];
 }
 

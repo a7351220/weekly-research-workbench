@@ -30,6 +30,9 @@ export async function fetchFeed(
   if (source.fetchMode === "html") {
     return fetchHtmlFeed(source, params);
   }
+  if (source.fetchMode === "api-json") {
+    return fetchApiJsonFeed(source, params);
+  }
 
   try {
     const response = await fetch(source.url, {
@@ -174,6 +177,99 @@ async function fetchHtmlFeed(
       },
     };
   }
+}
+
+async function fetchApiJsonFeed(
+  source: FeedSource,
+  params: WeeklyQueryParams,
+): Promise<FeedFetchResult> {
+  try {
+    const body = new URLSearchParams(buildApiJsonParams(source, params));
+    const response = await fetch(source.url, {
+      method: "POST",
+      headers: {
+        "user-agent": "weekly-rss-middleware/1.0",
+        accept: "application/json,text/plain,*/*",
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      },
+      body,
+      cf: {
+        cacheTtl: 300,
+        cacheEverything: false,
+      },
+    });
+
+    if (!response.ok) {
+      return {
+        items: [],
+        source,
+        failedFeed: {
+          source: source.name,
+          category: source.category,
+          url: source.url,
+          reason: "Fetch failed or non-200 response",
+          status: response.status,
+        },
+      };
+    }
+
+    const payload = await response.json() as {
+      stat?: string;
+      tables?: Array<{ data?: unknown[] }>;
+    };
+    const rawItems =
+      source.parser === "tpex_press_json"
+        ? extractTpexPressEntries(payload).slice(0, Math.max(params.limitPerSource * 3, 30))
+        : [];
+
+    const items: FeedItem[] = [];
+    for (const rawItem of rawItems) {
+      const item = await transformHtmlEntry(rawItem, source, params.keyword);
+      if (!item) continue;
+      if (!shouldKeepByDate(item, params.days)) continue;
+      if (params.keyword && item.matchedKeywords.length === 0) continue;
+      items.push(item);
+    }
+
+    return {
+      items: sortFeedItems(items).slice(0, params.limitPerSource),
+      source,
+    };
+  } catch (error) {
+    return {
+      items: [],
+      source,
+      failedFeed: {
+        source: source.name,
+        category: source.category,
+        url: source.url,
+        reason: error instanceof Error ? error.message : "Unknown parsing error",
+        status: null,
+      },
+    };
+  }
+}
+
+function buildApiJsonParams(
+  source: FeedSource,
+  params: WeeklyQueryParams,
+): Record<string, string> {
+  if (source.parser === "tpex_press_json") {
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(end.getDate() - Math.max(params.days, 35));
+    return {
+      response: "json",
+      startDate: formatYmdSlash(start),
+      endDate: formatYmdSlash(end),
+      keyword: "",
+      id: "",
+      "paging-offset": "0",
+      "paging-size": String(Math.max(params.limitPerSource * 3, 30)),
+    };
+  }
+
+  return { response: "json" };
 }
 
 function extractEntries(parsed: XmlNode): XmlNode[] {
@@ -467,6 +563,52 @@ function extractUdnTwStockEntries(html: string): Array<{
   return entries;
 }
 
+function extractTpexPressEntries(payload: {
+  stat?: string;
+  tables?: Array<{ data?: unknown[] }>;
+}): Array<{
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  description?: string | null;
+}> {
+  if (payload.stat !== "ok") {
+    return [];
+  }
+
+  const rows = Array.isArray(payload.tables?.[0]?.data)
+    ? payload.tables?.[0]?.data
+    : [];
+
+  const entries = rows
+    .map((row): {
+      title: string;
+      url: string;
+      publishedAt: string | null;
+      description?: string | null;
+    } | null => {
+      if (!Array.isArray(row) || row.length < 3) return null;
+      const [rawDate, rawTitle, rawId] = row;
+      const title = typeof rawTitle === "string" ? rawTitle.trim() : "";
+      const id = typeof rawId === "string" || typeof rawId === "number" ? String(rawId).trim() : "";
+      if (!title || !id) return null;
+      return {
+        title,
+        url: `https://www.tpex.org.tw/zh-tw/about/company/press/detail.html?${id}`,
+        publishedAt: parseRocDateText(typeof rawDate === "string" ? rawDate : null),
+        description: null,
+      };
+    })
+    .filter((item): item is {
+      title: string;
+      url: string;
+      publishedAt: string | null;
+      description?: string | null;
+    } => Boolean(item));
+
+  return entries;
+}
+
 function decodeEscapedJsonString(value: string): string {
   try {
     return JSON.parse(`"${value}"`) as string;
@@ -478,4 +620,21 @@ function decodeEscapedJsonString(value: string): string {
         String.fromCharCode(Number.parseInt(code, 16)),
       );
   }
+}
+
+function formatYmdSlash(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}/${m}/${d}`;
+}
+
+function parseRocDateText(input: string | null): string | null {
+  if (!input) return null;
+  const match = input.match(/民國\s*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/u);
+  if (!match) return null;
+  const year = Number(match[1]) + 1911;
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return new Date(Date.UTC(year, month - 1, day)).toISOString();
 }

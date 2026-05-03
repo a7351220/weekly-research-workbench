@@ -209,6 +209,7 @@ Optional category:
 - Yahoo Taiwan Funds News — `https://tw.stock.yahoo.com/rss?category=funds-news`
 - Cnyes Taiwan Stock News (HTML feed parser) — `https://news.cnyes.com/news/cat/tw_stock_news`
 - UDN Taiwan Stock News (HTML feed parser) — `https://money.udn.com/money/cate/5594`
+- TPEx Press Releases — `https://www.tpex.org.tw/www/zh-tw/news/list`
 
 Taiwan feeds are only fetched when `includeTaiwan=true`.
 
