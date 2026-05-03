@@ -106,8 +106,9 @@ a {
   background: var(--panel);
   padding: 12px;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: minmax(220px, 2.2fr) repeat(3, minmax(96px, 0.9fr)) minmax(220px, 1.8fr);
   gap: 10px;
+  align-items: start;
 }
 
 .control-group {
@@ -121,7 +122,7 @@ a {
 }
 
 .control-group-sources {
-  grid-column: span 5;
+  grid-column: 1 / -1;
   min-width: 0;
 }
 
@@ -130,8 +131,9 @@ a {
   min-width: 0;
 }
 
-.checkbox-group {
-  justify-content: flex-end;
+.control-group-keyword {
+  grid-column: span 2;
+  min-width: 0;
 }
 
 .control-group label {
@@ -193,18 +195,19 @@ a {
 }
 
 .categories-picker {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
 .category-pill {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
   border: 1px solid var(--border);
   background: var(--panel-2);
+  min-height: 36px;
 }
 
 .source-group + .source-group {
@@ -218,18 +221,19 @@ a {
 }
 
 .source-group-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 6px;
 }
 
 .source-pill {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
   border: 1px solid var(--border);
   background: var(--panel);
+  min-height: 34px;
 }
 
 button {

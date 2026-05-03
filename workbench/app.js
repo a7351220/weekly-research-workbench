@@ -43,7 +43,6 @@ const elements = {
   categoriesSelectAll: document.querySelector("#categories-select-all"),
   categoriesSelectDefault: document.querySelector("#categories-select-default"),
   keyword: document.querySelector("#keyword"),
-  includeTaiwan: document.querySelector("#include-taiwan"),
   sourcesPicker: document.querySelector("#sources-picker"),
   sourcesSelectAll: document.querySelector("#sources-select-all"),
   sourcesClearAll: document.querySelector("#sources-clear-all"),
@@ -130,13 +129,11 @@ function bindEvents() {
     elements.limitPerSource,
     elements.maxItems,
     elements.keyword,
-    elements.includeTaiwan,
   ].forEach((element) => {
     element.addEventListener("change", persistControls);
   });
 
   elements.categoriesPicker.addEventListener("change", handleCategoryPickerChange);
-  elements.includeTaiwan.addEventListener("change", handleIncludeTaiwanChange);
 }
 
 function hydrateControls() {
@@ -151,7 +148,6 @@ function hydrateControls() {
   elements.limitPerSource.value = filters.limitPerSource || elements.limitPerSource.value;
   elements.maxItems.value = filters.maxItems || elements.maxItems.value;
   elements.keyword.value = filters.keyword || "";
-  elements.includeTaiwan.checked = Boolean(filters.includeTaiwan);
   state.selections = filters.selections || {};
   state.sort = {
     topics: filters.topicSort || "story",
@@ -291,14 +287,12 @@ function setCheckedCategories(values) {
   elements.categoriesPicker.querySelectorAll(".category-checkbox").forEach((input) => {
     input.checked = selected.has(input.value);
   });
-  syncIncludeTaiwanWithCategories();
 }
 
 function setAllCategories(checked) {
   elements.categoriesPicker.querySelectorAll(".category-checkbox").forEach((input) => {
     input.checked = checked;
   });
-  syncIncludeTaiwanWithCategories();
   persistControls();
 }
 
@@ -308,24 +302,6 @@ function setDefaultCategories() {
 }
 
 function handleCategoryPickerChange() {
-  syncIncludeTaiwanWithCategories();
-  persistControls();
-}
-
-function syncIncludeTaiwanWithCategories() {
-  const selected = getSelectedCategories();
-  const hasTaiwan = selected.includes("taiwan_stocks");
-  elements.includeTaiwan.checked = hasTaiwan;
-}
-
-function handleIncludeTaiwanChange() {
-  const selected = new Set(getSelectedCategories());
-  if (elements.includeTaiwan.checked) {
-    selected.add("taiwan_stocks");
-  } else {
-    selected.delete("taiwan_stocks");
-  }
-  setCheckedCategories([...selected]);
   persistControls();
 }
 
@@ -357,7 +333,6 @@ function persistControls() {
     categories: getSelectedCategories().join(","),
     selectedCategories: getSelectedCategories(),
     keyword: elements.keyword.value,
-    includeTaiwan: elements.includeTaiwan.checked,
     selectedSources: getSelectedSourceNames(),
     selections: state.selections,
     topicSort: state.sort.topics,
@@ -454,14 +429,16 @@ async function handleLoadWeekly() {
   persistControls();
 
   try {
+    const selectedCategories = getSelectedCategories();
+    const includeTaiwan = selectedCategories.includes("taiwan_stocks");
     const params = new URLSearchParams({
       days: elements.days.value,
       limitPerSource: elements.limitPerSource.value,
       maxItemsPerCategory: elements.maxItems.value,
-      includeTaiwan: String(elements.includeTaiwan.checked),
+      includeTaiwan: String(includeTaiwan),
     });
 
-    const categories = getSelectedCategories().join(",");
+    const categories = selectedCategories.join(",");
     const keyword = elements.keyword.value.trim();
     const selectedSources = getSelectedSourceNames();
     if (categories) params.set("categories", categories);
@@ -1080,7 +1057,7 @@ function buildExportPayload() {
       days: Number(elements.days.value),
       limitPerSource: Number(elements.limitPerSource.value),
       maxItemsPerCategory: Number(elements.maxItems.value),
-      includeTaiwan: elements.includeTaiwan.checked,
+      includeTaiwan: getSelectedCategories().includes("taiwan_stocks"),
       categories: getSelectedCategories().join(",") || null,
       sources: getSelectedSourceNames(),
       keyword: elements.keyword.value.trim() || null,
