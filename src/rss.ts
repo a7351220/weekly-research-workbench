@@ -149,6 +149,8 @@ async function fetchHtmlFeed(
         ? extractCnyesTwStockEntries(html).slice(0, params.limitPerSource)
         : source.parser === "udn_tw_stock_html"
           ? extractUdnTwStockEntries(html).slice(0, params.limitPerSource)
+        : source.parser === "udn_jsonld_list"
+          ? extractUdnJsonLdEntries(html).slice(0, params.limitPerSource)
         : [];
 
     const items: FeedItem[] = [];
@@ -516,7 +518,9 @@ function extractCnyesTwStockEntries(html: string): Array<{
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(section)) !== null) {
     const [, newsId, rawTitle, rawPublishAt] = match;
-    const title = decodeEscapedJsonString(rawTitle);
+    const title = decodeEscapedJsonString(rawTitle)
+      .replace(/","payment".*$/s, "")
+      .trim();
     const publishedAt = Number(rawPublishAt) > 0
       ? new Date(Number(rawPublishAt) * 1000).toISOString()
       : null;
@@ -558,6 +562,81 @@ function extractUdnTwStockEntries(html: string): Array<{
       publishedAt: null,
       description: null,
     });
+  }
+
+  return entries;
+}
+
+function extractUdnJsonLdEntries(html: string): Array<{
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  description?: string | null;
+}> {
+  const scripts = [...html.matchAll(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+  )];
+
+  const entries: Array<{
+    title: string;
+    url: string;
+    publishedAt: string | null;
+    description?: string | null;
+  }> = [];
+  const seen = new Set<string>();
+
+  for (const match of scripts) {
+    const raw = match[1]?.trim();
+    if (!raw) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+
+    const nodes = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" &&
+          Array.isArray((parsed as Record<string, unknown>)["@graph"])
+        ? (parsed as Record<string, unknown>)["@graph"] as unknown[]
+        : [parsed];
+    for (const node of nodes) {
+      if (!node || typeof node !== "object") continue;
+      const record = node as Record<string, unknown>;
+      const items = Array.isArray(record.itemListElement)
+        ? record.itemListElement
+        : [];
+
+      for (const item of items) {
+        const article = item && typeof item === "object"
+          ? (item as Record<string, unknown>).item
+          : null;
+        if (!article || typeof article !== "object") continue;
+        const articleRecord = article as Record<string, unknown>;
+        const urlValue = typeof articleRecord.url === "string"
+          ? articleRecord.url.trim().replace(/\s+/g, "")
+          : "";
+        const titleValue = typeof articleRecord.headline === "string"
+          ? articleRecord.headline.trim()
+          : typeof articleRecord.name === "string"
+            ? articleRecord.name.trim()
+            : "";
+        if (!urlValue || !titleValue || seen.has(urlValue)) continue;
+        seen.add(urlValue);
+        entries.push({
+          title: titleValue,
+          url: resolveUrl(urlValue, "https://money.udn.com"),
+          publishedAt: typeof articleRecord.datePublished === "string"
+            ? articleRecord.datePublished
+            : null,
+          description: typeof articleRecord.description === "string"
+            ? articleRecord.description.trim()
+            : null,
+        });
+      }
+    }
   }
 
   return entries;

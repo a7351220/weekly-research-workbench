@@ -20,7 +20,11 @@ export interface FeedSource {
   priority: number;
   sourceType: "official" | "media" | "research";
   fetchMode?: "rss" | "html" | "rss-big5" | "api-json";
-  parser?: "cnyes_tw_stock_html" | "udn_tw_stock_html" | "tpex_press_json";
+  parser?:
+    | "cnyes_tw_stock_html"
+    | "udn_tw_stock_html"
+    | "udn_jsonld_list"
+    | "tpex_press_json";
   articleHosts?: string[];
 }
 

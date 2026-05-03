@@ -207,6 +207,16 @@ export const SOURCES: FeedSource[] = [
     enabledByDefault: true,
     priority: 74,
     sourceType: "media",
+    articleHosts: ["www.cna.com.tw", "cna.com.tw"],
+  },
+  {
+    name: "CNA Technology",
+    url: "https://feeds.feedburner.com/rsscna/technology",
+    category: "taiwan_stocks",
+    enabledByDefault: true,
+    priority: 70,
+    sourceType: "media",
+    articleHosts: ["www.cna.com.tw", "cna.com.tw"],
   },
   {
     name: "MoneyDJ Finance News",
@@ -215,6 +225,7 @@ export const SOURCES: FeedSource[] = [
     enabledByDefault: true,
     priority: 68,
     sourceType: "media",
+    articleHosts: ["www.moneydj.com", "moneydj.com"],
   },
   {
     name: "MOPS Material Information 201001",
@@ -288,6 +299,7 @@ export const SOURCES: FeedSource[] = [
     sourceType: "media",
     fetchMode: "html",
     parser: "cnyes_tw_stock_html",
+    articleHosts: ["news.cnyes.com", "cnyes.com"],
   },
   {
     name: "UDN Taiwan Stock News",
@@ -298,6 +310,18 @@ export const SOURCES: FeedSource[] = [
     sourceType: "media",
     fetchMode: "html",
     parser: "udn_tw_stock_html",
+    articleHosts: ["money.udn.com", "udn.com"],
+  },
+  {
+    name: "UDN Taiwan Industry News",
+    url: "https://money.udn.com/money/cate/5591",
+    category: "taiwan_stocks",
+    enabledByDefault: true,
+    priority: 66,
+    sourceType: "media",
+    fetchMode: "html",
+    parser: "udn_jsonld_list",
+    articleHosts: ["money.udn.com", "udn.com"],
   },
   {
     name: "TPEx Press Releases",

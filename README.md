@@ -199,6 +199,7 @@ Optional category:
 - FSC Press Releases — `https://www.fsc.gov.tw/RSS/Messages?serno=201202290016&language=english`
 - TWSE News — `https://www.twse.com.tw/rwd/zh/news/feed?type=rss`
 - CNA Finance — `https://feeds.feedburner.com/rsscna/finance`
+- CNA Technology — `https://feeds.feedburner.com/rsscna/technology`
 - MoneyDJ Finance News — `https://www.moneydj.com/kmdj/RssCenter.aspx?svc=NW&fno=1&arg=X0000000`
 - MOPS Material Information 201001 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201001.xml`
 - MOPS Material Information 201002 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201002.xml`
@@ -209,6 +210,7 @@ Optional category:
 - Yahoo Taiwan Funds News — `https://tw.stock.yahoo.com/rss?category=funds-news`
 - Cnyes Taiwan Stock News (HTML feed parser) — `https://news.cnyes.com/news/cat/tw_stock_news`
 - UDN Taiwan Stock News (HTML feed parser) — `https://money.udn.com/money/cate/5594`
+- UDN Taiwan Industry News (HTML feed parser) — `https://money.udn.com/money/cate/5591`
 - TPEx Press Releases — `https://www.tpex.org.tw/www/zh-tw/news/list`
 
 Taiwan feeds are only fetched when `includeTaiwan=true`.
