@@ -20,7 +20,7 @@ export interface FeedSource {
   priority: number;
   sourceType: "official" | "media" | "research";
   fetchMode?: "rss" | "html";
-  parser?: "cnyes_tw_stock_html";
+  parser?: "cnyes_tw_stock_html" | "udn_tw_stock_html";
 }
 
 export interface WeeklyQueryParams {

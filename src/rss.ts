@@ -129,6 +129,8 @@ async function fetchHtmlFeed(
     const rawItems =
       source.parser === "cnyes_tw_stock_html"
         ? extractCnyesTwStockEntries(html).slice(0, params.limitPerSource)
+        : source.parser === "udn_tw_stock_html"
+          ? extractUdnTwStockEntries(html).slice(0, params.limitPerSource)
         : [];
 
     const items: FeedItem[] = [];
@@ -416,6 +418,38 @@ function extractCnyesTwStockEntries(html: string): Array<{
   }
 
   return items;
+}
+
+function extractUdnTwStockEntries(html: string): Array<{
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  description?: string | null;
+}> {
+  const entries: Array<{
+    title: string;
+    url: string;
+    publishedAt: string | null;
+    description?: string | null;
+  }> = [];
+
+  const regex = /<a href="(\/money\/story\/[^"]+)"[^>]*class="story-list__item--text[^>]*>([^<]+)<\/a>/g;
+  const seen = new Set<string>();
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    const url = resolveUrl(match[1], "https://money.udn.com");
+    if (seen.has(url)) continue;
+    seen.add(url);
+    entries.push({
+      title: match[2].trim(),
+      url,
+      publishedAt: null,
+      description: null,
+    });
+  }
+
+  return entries;
 }
 
 function decodeEscapedJsonString(value: string): string {

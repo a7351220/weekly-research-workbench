@@ -234,6 +234,16 @@ export const SOURCES: FeedSource[] = [
     fetchMode: "html",
     parser: "cnyes_tw_stock_html",
   },
+  {
+    name: "UDN Taiwan Stock News",
+    url: "https://money.udn.com/money/cate/5594",
+    category: "taiwan_stocks",
+    enabledByDefault: false,
+    priority: 60,
+    sourceType: "media",
+    fetchMode: "html",
+    parser: "udn_tw_stock_html",
+  },
 ];
 
 export function getSourcesByCategory(includeTaiwan: boolean): Record<Category, FeedSource[]> {

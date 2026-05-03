@@ -202,6 +202,7 @@ Optional category:
 - MoneyDJ Finance News — `https://www.moneydj.com/kmdj/RssCenter.aspx?svc=NW&fno=1&arg=X0000000`
 - Yahoo Taiwan Stock News — `https://tw.stock.yahoo.com/rss?category=tw-market`
 - Cnyes Taiwan Stock News (HTML feed parser) — `https://news.cnyes.com/news/cat/tw_stock_news`
+- UDN Taiwan Stock News (HTML feed parser) — `https://money.udn.com/money/cate/5594`
 
 Taiwan feeds are only fetched when `includeTaiwan=true`.
 
