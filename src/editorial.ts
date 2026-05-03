@@ -150,6 +150,7 @@ const TAIWAN_LOCAL_STORY_SOURCE_SET = new Set([
   "Cnyes Taiwan Stock News",
   "UDN Taiwan Stock News",
   "UDN Taiwan Industry News",
+  "Business Weekly Investment",
 ]);
 
 const TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET = new Set([

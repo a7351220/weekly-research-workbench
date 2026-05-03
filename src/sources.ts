@@ -246,6 +246,15 @@ export const SOURCES: FeedSource[] = [
     articleHosts: ["finance.technews.tw", "technews.tw"],
   },
   {
+    name: "Business Weekly Investment",
+    url: "https://www.businessweekly.com.tw/Event/feedsec.aspx?feedid=10&channelid=15",
+    category: "taiwan_stocks",
+    enabledByDefault: true,
+    priority: 58,
+    sourceType: "media",
+    articleHosts: ["www.businessweekly.com.tw", "businessweekly.com.tw"],
+  },
+  {
     name: "MOPS Material Information 201001",
     url: "https://mopsov.twse.com.tw/nas/rss/mopsrss201001.xml",
     category: "taiwan_stocks",
