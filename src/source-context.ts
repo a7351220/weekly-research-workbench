@@ -126,25 +126,27 @@ function extractArticleFromHtml(
   sourceName: string,
   maxParagraphs: number,
 ): SourceContextArticle {
+  const headHtml = html.slice(0, 140_000);
+  const contentHtml = prepareHtmlForExtraction(html);
   const title =
-    extractMetaContent(html, "property", "og:title") ||
-    extractMetaContent(html, "name", "twitter:title") ||
-    extractTagText(html, "title") ||
+    extractMetaContent(headHtml, "property", "og:title") ||
+    extractMetaContent(headHtml, "name", "twitter:title") ||
+    extractTagText(headHtml, "title") ||
     "";
 
   const description =
-    extractMetaContent(html, "property", "og:description") ||
-    extractMetaContent(html, "name", "description") ||
+    extractMetaContent(headHtml, "property", "og:description") ||
+    extractMetaContent(headHtml, "name", "description") ||
     "";
 
   const publishedRaw =
-    extractMetaContent(html, "property", "article:published_time") ||
-    extractMetaContent(html, "name", "article:published_time") ||
-    extractMetaContent(html, "name", "parsely-pub-date") ||
-    extractTimeDatetime(html);
+    extractMetaContent(headHtml, "property", "article:published_time") ||
+    extractMetaContent(headHtml, "name", "article:published_time") ||
+    extractMetaContent(headHtml, "name", "parsely-pub-date") ||
+    extractTimeDatetime(headHtml);
   const publishedAt = parseDate(publishedRaw).publishedAt;
 
-  const paragraphPool = extractParagraphs(html)
+  const paragraphPool = extractParagraphs(contentHtml)
     .map((paragraph) => cleanDescription(paragraph, 1200))
     .filter((paragraph) => paragraph.length >= 40)
     .filter((paragraph) => !isBylineParagraph(paragraph))
@@ -234,6 +236,18 @@ function extractTagText(html: string, tagName: string): string | null {
 function extractTimeDatetime(html: string): string | null {
   const match = html.match(/<time[^>]+datetime=["']([^"']+)["'][^>]*>/i);
   return match ? match[1] : null;
+}
+
+function prepareHtmlForExtraction(html: string): string {
+  const bodyMatch = html.match(/<body[\s\S]*<\/body>/i);
+  const base = bodyMatch ? bodyMatch[0] : html;
+
+  return base
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, " ")
+    .slice(0, 220_000);
 }
 
 function extractParagraphs(html: string): string[] {
