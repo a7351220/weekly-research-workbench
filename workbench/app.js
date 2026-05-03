@@ -1,4 +1,4 @@
-const STORAGE_KEY = "weekly-research-workbench:v2";
+const STORAGE_KEY = "weekly-research-workbench:v3";
 const DEFAULT_LAYOUT = {
   topicsWidth: 320,
   contextWidth: 420,
@@ -203,10 +203,31 @@ async function loadSources() {
     if (!state.filters?.selectedSources?.length) {
       state.filters = { ...(state.filters || {}), selectedSources: state.availableSources.map((s) => s.name) };
     }
+    maybeBackfillTaiwanSources();
     renderSourcesPicker();
   } catch (error) {
     elements.sourcesPicker.textContent = error instanceof Error ? error.message : "failed to load sources";
   }
+}
+
+function maybeBackfillTaiwanSources() {
+  const selectedCategories = getSelectedCategories();
+  if (!selectedCategories.includes("taiwan_stocks")) {
+    return;
+  }
+
+  const current = new Set(state.filters?.selectedSources || []);
+  const taiwanSources = state.availableSources.filter((source) => source.category === "taiwan_stocks");
+  const hasAnyTaiwanSelected = taiwanSources.some((source) => current.has(source.name));
+  if (hasAnyTaiwanSelected) {
+    return;
+  }
+
+  const defaults = taiwanSources.filter((source) => source.enabled).map((source) => source.name);
+  state.filters = {
+    ...(state.filters || {}),
+    selectedSources: [...current, ...defaults],
+  };
 }
 
 function normalizeSourcesPayload(payload) {
@@ -724,10 +745,21 @@ function getVisibleTopics() {
   let topics = [...(state.topicGroups[state.activeTopicTab] || [])];
 
   if (state.sort.hideWeakTopics) {
+    const selectedCategories = getSelectedCategories();
+    const taiwanOnly =
+      selectedCategories.length === 1 && selectedCategories[0] === "taiwan_stocks";
     topics = topics.filter((topic) =>
-      topic.scores.editorialScore >= 110 ||
-      topic.scores.corroborationScore >= 45 ||
-      topic.scores.marketReactionScore >= 40,
+      taiwanOnly
+        ? (
+            topic.scores.editorialScore >= 70 ||
+            topic.scores.corroborationScore >= 18 ||
+            topic.scores.marketReactionScore >= 12
+          )
+        : (
+            topic.scores.editorialScore >= 110 ||
+            topic.scores.corroborationScore >= 45 ||
+            topic.scores.marketReactionScore >= 40
+          ),
     );
   }
 
