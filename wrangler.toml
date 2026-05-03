@@ -1,0 +1,14 @@
+name = "weekly-rss-middleware"
+main = "src/index.ts"
+compatibility_date = "2025-05-02"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[observability]
+enabled = true
+
+[[kv_namespaces]]
+binding = "EDITORIAL_CACHE"
+id = "49caf6f1f36c4a06ab4f7e61eca26636"
+preview_id = "6a3e542038444576a3328ad980d03a46"

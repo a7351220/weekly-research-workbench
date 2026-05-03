@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weekly Research Workbench</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-title">weekly-research-workbench</div>
+          <div class="brand-subtitle">tui / rss / source-context / local-only</div>
+        </div>
+        <div class="statusline">
+          <span id="status">idle</span>
+          <span id="pinned-count">pinned: 0</span>
+          <span id="selection-count">selected: 0</span>
+        </div>
+      </header>
+
+      <section class="controls">
+        <div class="control-group control-group-wide">
+          <label for="api-base">api_base</label>
+          <div class="masked-input-row">
+            <input
+              id="api-base"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              value="https://weekly-rss-middleware.c7351220.workers.dev"
+            />
+            <button id="toggle-api-base" type="button" class="secondary toggle-secret">
+              show
+            </button>
+          </div>
+        </div>
+        <div class="control-group">
+          <label for="days">days</label>
+          <input id="days" type="number" min="1" max="30" value="7" />
+        </div>
+        <div class="control-group">
+          <label for="limit-per-source">limit_per_source</label>
+          <input id="limit-per-source" type="number" min="1" max="20" value="6" />
+        </div>
+        <div class="control-group">
+          <label for="max-items">max_items_per_category</label>
+          <input id="max-items" type="number" min="1" max="50" value="10" />
+        </div>
+        <div class="control-group control-group-wide">
+          <label for="categories">categories</label>
+          <input
+            id="categories"
+            type="text"
+            placeholder="crypto,us_stocks_macro,ai"
+            value=""
+          />
+        </div>
+        <div class="control-group control-group-wide">
+          <label for="keyword">keyword</label>
+          <input id="keyword" type="text" placeholder="optional" value="" />
+        </div>
+        <div class="control-group checkbox-group">
+          <label for="include-taiwan">include_taiwan</label>
+          <input id="include-taiwan" type="checkbox" />
+        </div>
+        <div class="actions">
+          <button id="load-weekly">load_weekly</button>
+          <button id="clear-selection" class="secondary">clear_selection</button>
+          <button id="export-json" class="secondary">export_json</button>
+          <button id="export-markdown" class="secondary">export_markdown</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel panel-topics">
+          <div class="panel-header">
+            <span>topics</span>
+            <span id="topics-meta">0</span>
+          </div>
+          <div class="panel-body">
+            <div class="tabbar">
+              <button id="tab-bundles" class="tab is-active" type="button">bundles</button>
+              <button id="tab-clusters" class="tab" type="button">clusters</button>
+              <button id="tab-raw" class="tab" type="button">raw</button>
+            </div>
+            <div class="subcontrols">
+              <div class="control-inline">
+                <label for="topic-sort">sort</label>
+                <select id="topic-sort">
+                  <option value="story">story</option>
+                  <option value="sq">source_quality</option>
+                  <option value="co">corroboration</option>
+                  <option value="mr">market_reaction</option>
+                  <option value="ed">editorial</option>
+                </select>
+              </div>
+              <label class="checkbox-inline">
+                <input id="hide-weak-topics" type="checkbox" />
+                <span>hide weak</span>
+              </label>
+            </div>
+            <div id="topics-list" class="scroll topics-scroll"></div>
+          </div>
+        </aside>
+
+        <div
+          id="resize-topics"
+          class="panel-resizer"
+          role="separator"
+          aria-label="resize topics panel"
+          aria-orientation="vertical"
+          tabindex="0"
+        ></div>
+
+        <main class="panel panel-articles">
+          <div class="panel-header">
+            <span>articles</span>
+            <span id="articles-meta">0</span>
+          </div>
+          <div class="panel-body">
+            <div class="subcontrols">
+              <div class="control-inline">
+                <label for="article-sort">sort</label>
+                <select id="article-sort">
+                  <option value="editorial">editorial</option>
+                  <option value="sq">source_quality</option>
+                  <option value="co">corroboration</option>
+                  <option value="mr">market_reaction</option>
+                  <option value="latest">latest</option>
+                </select>
+              </div>
+              <label class="checkbox-inline">
+                <input id="selected-only" type="checkbox" />
+                <span>selected only</span>
+              </label>
+            </div>
+            <div id="articles-list" class="scroll articles-scroll"></div>
+          </div>
+        </main>
+
+        <div
+          id="resize-context"
+          class="panel-resizer"
+          role="separator"
+          aria-label="resize context panel"
+          aria-orientation="vertical"
+          tabindex="0"
+        ></div>
+
+        <aside class="panel panel-context">
+          <div class="panel-header">
+            <span>context</span>
+            <span id="context-meta">none</span>
+          </div>
+          <div class="panel-body scroll">
+            <div id="context-view" class="context-empty">
+              select an article to load source_context
+            </div>
+          </div>
+        </aside>
+      </section>
+    </div>
+
+    <template id="topic-item-template">
+      <div class="topic-card">
+        <button class="topic-item">
+          <div class="topic-item-title"></div>
+          <div class="topic-item-summary"></div>
+          <div class="topic-item-meta"></div>
+        </button>
+        <div class="topic-actions">
+          <label class="checkbox-inline">
+            <input class="topic-pinned" type="checkbox" />
+            <span>pin</span>
+          </label>
+          <input class="topic-note" type="text" placeholder="topic note" />
+        </div>
+      </div>
+    </template>
+
+    <template id="article-item-template">
+      <div class="article-item">
+        <div class="article-main">
+          <button class="article-open"></button>
+          <div class="article-meta"></div>
+          <div class="article-links"></div>
+        </div>
+        <div class="article-actions">
+          <label class="checkbox-inline">
+            <input class="article-selected" type="checkbox" />
+            <span>select</span>
+          </label>
+          <select class="article-role">
+            <option value="core">core</option>
+            <option value="related">related</option>
+          </select>
+          <input class="article-note" type="text" placeholder="article note" />
+        </div>
+      </div>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
