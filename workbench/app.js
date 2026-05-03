@@ -31,6 +31,8 @@ const state = {
     articles: "editorial",
     hideWeakTopics: false,
     selectedOnly: false,
+    officialOnly: false,
+    evidenceStrongOnly: false,
   },
 };
 
@@ -51,6 +53,10 @@ const elements = {
   useBlockBeats: document.querySelector("#use-blockbeats"),
   useOpenNews: document.querySelector("#use-opennews"),
   useTwitterKols: document.querySelector("#use-twitter-kols"),
+  controlsOverlay: document.querySelector("#controls-overlay"),
+  controlsBackdrop: document.querySelector("#controls-backdrop"),
+  settingsOpen: document.querySelector("#settings-open"),
+  settingsClose: document.querySelector("#settings-close"),
   status: document.querySelector("#status"),
   pinnedCount: document.querySelector("#pinned-count"),
   selectionCount: document.querySelector("#selection-count"),
@@ -76,6 +82,8 @@ const elements = {
   articleSort: document.querySelector("#article-sort"),
   hideWeakTopics: document.querySelector("#hide-weak-topics"),
   selectedOnly: document.querySelector("#selected-only"),
+  officialOnly: document.querySelector("#official-only"),
+  evidenceStrongOnly: document.querySelector("#evidence-strong-only"),
 };
 
 init();
@@ -89,6 +97,9 @@ function init() {
 }
 
 function bindEvents() {
+  elements.settingsOpen.addEventListener("click", openSettings);
+  elements.settingsClose.addEventListener("click", closeSettings);
+  elements.controlsBackdrop.addEventListener("click", closeSettings);
   elements.loadWeekly.addEventListener("click", handleLoadWeekly);
   elements.clearSelection.addEventListener("click", handleClearSelection);
   elements.exportJson.addEventListener("click", exportSelectionJson);
@@ -114,6 +125,16 @@ function bindEvents() {
   });
   elements.selectedOnly.addEventListener("change", () => {
     state.sort.selectedOnly = elements.selectedOnly.checked;
+    persistControls();
+    renderArticles();
+  });
+  elements.officialOnly.addEventListener("change", () => {
+    state.sort.officialOnly = elements.officialOnly.checked;
+    persistControls();
+    renderArticles();
+  });
+  elements.evidenceStrongOnly.addEventListener("change", () => {
+    state.sort.evidenceStrongOnly = elements.evidenceStrongOnly.checked;
     persistControls();
     renderArticles();
   });
@@ -146,6 +167,19 @@ function bindEvents() {
   });
 
   elements.categoriesPicker.addEventListener("change", handleCategoryPickerChange);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeSettings();
+    }
+  });
+}
+
+function openSettings() {
+  elements.controlsOverlay.hidden = false;
+}
+
+function closeSettings() {
+  elements.controlsOverlay.hidden = true;
 }
 
 function hydrateControls() {
@@ -170,11 +204,15 @@ function hydrateControls() {
     articles: filters.articleSort || "editorial",
     hideWeakTopics: Boolean(filters.hideWeakTopics),
     selectedOnly: Boolean(filters.selectedOnly),
+    officialOnly: Boolean(filters.officialOnly),
+    evidenceStrongOnly: Boolean(filters.evidenceStrongOnly),
   };
   elements.topicSort.value = state.sort.topics;
   elements.articleSort.value = state.sort.articles;
   elements.hideWeakTopics.checked = state.sort.hideWeakTopics;
   elements.selectedOnly.checked = state.sort.selectedOnly;
+  elements.officialOnly.checked = state.sort.officialOnly;
+  elements.evidenceStrongOnly.checked = state.sort.evidenceStrongOnly;
 
   if (Array.isArray(filters.selectedCategories) && filters.selectedCategories.length > 0) {
     setCheckedCategories(filters.selectedCategories);
@@ -393,6 +431,8 @@ function persistControls() {
     articleSort: state.sort.articles,
     hideWeakTopics: state.sort.hideWeakTopics,
     selectedOnly: state.sort.selectedOnly,
+    officialOnly: state.sort.officialOnly,
+    evidenceStrongOnly: state.sort.evidenceStrongOnly,
     topicsWidth: getLayoutWidth("topics"),
     contextWidth: getLayoutWidth("context"),
   };
@@ -497,7 +537,9 @@ async function handleLoadWeekly() {
     const selectedSources = getSelectedSourceNames();
     if (categories) params.set("categories", categories);
     if (keyword) params.set("keyword", keyword);
-    params.set("sources", selectedSources.join(","));
+    if (selectedSources.length > 0) {
+      params.set("sources", selectedSources.join(","));
+    }
     params.set("usePrivateSignals", String(elements.usePrivateSignals.checked));
     params.set("useBlockBeats", String(elements.useBlockBeats.checked));
     params.set("useOpenNews", String(elements.useOpenNews.checked));
@@ -658,12 +700,23 @@ function buildFallbackTitle(group) {
 
 function renderTopics() {
   elements.topicsList.innerHTML = "";
+  ensureVisibleTopicTab();
   const visibleTopics = getVisibleTopics();
-  elements.topicsMeta.textContent = `${visibleTopics.length} / ${state.topics.length}`;
+  elements.topicsMeta.textContent = formatTopicMeta(visibleTopics.length, state.topics.length);
   renderTabs();
 
   if (!visibleTopics.length) {
-    elements.topicsList.innerHTML = `<div class="empty-state">load /weekly first</div>`;
+    const availableTabs = getTopicTabCounts();
+    const hint = [
+      availableTabs.bundle ? `bundles ${availableTabs.bundle}` : null,
+      availableTabs.cluster ? `clusters ${availableTabs.cluster}` : null,
+      availableTabs.fallback ? `raw ${availableTabs.fallback}` : null,
+    ]
+      .filter(Boolean)
+      .join(" / ");
+    elements.topicsList.innerHTML = `<div class="empty-state">${
+      hint ? `current tab empty (${hint})` : "load /weekly first"
+    }</div>`;
     return;
   }
 
@@ -684,6 +737,9 @@ function renderTopics() {
     title.textContent = topic.title;
     summary.textContent = topic.summary || "no summary";
     meta.textContent = `${topic.itemCount} articles / ${topic.sourceCount} sources / ${topic.categories.join(", ")} / sq ${topic.scores.sourceQualityScore} / co ${topic.scores.corroborationScore} / mr ${topic.scores.marketReactionScore}`;
+    const officialBackedCount = countOfficialBackedArticles(topic);
+    const strongEvidenceCount = countStrongEvidenceArticles(topic);
+    meta.textContent += ` / off ${officialBackedCount} / strong ${strongEvidenceCount}`;
     const topicState = state.selections[`topic:${topic.key}`] || {};
     pinned.checked = Boolean(topicState.pinned);
     note.value = topicState.note || "";
@@ -739,6 +795,35 @@ function switchTopicTab(tab) {
   renderTopics();
   renderArticles();
   renderContext();
+}
+
+function ensureVisibleTopicTab() {
+  const current = state.topicGroups[state.activeTopicTab] || [];
+  if (current.length) return;
+  const next = getFirstNonEmptyTopicTab();
+  if (next) {
+    state.activeTopicTab = next;
+  }
+}
+
+function getFirstNonEmptyTopicTab() {
+  for (const tab of ["bundle", "cluster", "fallback"]) {
+    if ((state.topicGroups[tab] || []).length) return tab;
+  }
+  return null;
+}
+
+function getTopicTabCounts() {
+  return {
+    bundle: (state.topicGroups.bundle || []).length,
+    cluster: (state.topicGroups.cluster || []).length,
+    fallback: (state.topicGroups.fallback || []).length,
+  };
+}
+
+function formatTopicMeta(visibleCount, totalCount) {
+  const counts = getTopicTabCounts();
+  return `${visibleCount} / ${totalCount} (b ${counts.bundle} / c ${counts.cluster} / r ${counts.fallback})`;
 }
 
 function getVisibleTopics() {
@@ -805,6 +890,7 @@ function renderArticles() {
     links.innerHTML = `
       ${topic ? topic.title : "topic"} /
       <a href="${article.url}" target="_blank" rel="noreferrer">open source</a>
+      ${renderArticleSourceBadges(article)}
       ${renderArticleEvidenceBadges(evidence)}
     `;
     selected.checked = Boolean(selectedState);
@@ -855,6 +941,7 @@ function renderArticles() {
 }
 
 function buildSelectionRecord(article, topic, role, note = "") {
+  const evidence = summarizeContextEvidence(state.contexts[article.url]);
   return {
     id: article.id,
     url: article.url,
@@ -868,6 +955,9 @@ function buildSelectionRecord(article, topic, role, note = "") {
     sourceQualityScore: article.sourceQualityScore ?? 0,
     corroborationScore: article.corroborationScore ?? 0,
     marketReactionScore: article.marketReactionScore ?? 0,
+    sourceType: article.sourceType || "media",
+    officialBacked: isOfficialBacked(article),
+    evidenceStrength: evidence.label,
     note: note.trim(),
   };
 }
@@ -900,6 +990,12 @@ function getTopicArticles(topic) {
 
   if (state.sort.selectedOnly) {
     articles = articles.filter((article) => Boolean(state.selections[article.url]));
+  }
+  if (state.sort.officialOnly) {
+    articles = articles.filter((article) => isOfficialBacked(article));
+  }
+  if (state.sort.evidenceStrongOnly) {
+    articles = articles.filter((article) => summarizeContextEvidence(state.contexts[article.url]).label === "high");
   }
 
   const rankers = {
@@ -1065,6 +1161,17 @@ function renderArticleEvidenceBadges(evidence) {
   `;
 }
 
+function renderArticleSourceBadges(article) {
+  const badges = [];
+  if (article.sourceType) {
+    badges.push(`<span class="badge">${escapeHtml(article.sourceType)}</span>`);
+  }
+  if (isOfficialBacked(article)) {
+    badges.push(`<span class="badge strong">official-backed</span>`);
+  }
+  return badges.join("");
+}
+
 function renderEvidenceStatusBadges(evidence) {
   const badges = [];
   badges.push(`<span class="badge ${evidence.numberCount > 0 ? "strong" : "danger"}">numbers ${evidence.numberCount}</span>`);
@@ -1120,7 +1227,7 @@ function buildExportPayload() {
   const topics = buildResearchTopics(selectedEntries, pinnedTopics);
   return {
     generatedAt: new Date().toISOString(),
-    formatVersion: "research-pack/v1",
+    formatVersion: "research-pack/v2",
     apiBase: trimSlash(elements.apiBase.value),
     params: {
       days: Number(elements.days.value),
@@ -1128,7 +1235,7 @@ function buildExportPayload() {
       maxItemsPerCategory: Number(elements.maxItems.value),
       includeTaiwan: getSelectedCategories().includes("taiwan_stocks"),
       categories: getSelectedCategories().join(",") || null,
-      sources: getSelectedSourceNames(),
+      sources: getSelectedSourceNames().length > 0 ? getSelectedSourceNames() : null,
       usePrivateSignals: elements.usePrivateSignals.checked,
       useBlockBeats: elements.useBlockBeats.checked,
       useOpenNews: elements.useOpenNews.checked,
@@ -1137,8 +1244,24 @@ function buildExportPayload() {
     },
     pinnedTopics,
     topics,
+    writingHandoff: topics.map((topic) => ({
+      topicKey: topic.topicKey,
+      topicTitle: topic.topicTitle,
+      storyAngle: topic.storyAngle,
+      officialBackedCount: topic.officialBackedCount,
+      strongEvidenceCount: topic.strongEvidenceCount,
+      sourceCount: topic.sourceCount,
+      articleCount: topic.articleCount,
+      keyNumbers: topic.numbers.slice(0, 12),
+      keyQuotes: topic.keyQuotes.slice(0, 4),
+      factCheckItems: topic.factCheckItems,
+      coreLinks: topic.core.map((article) => article.url),
+      relatedLinks: topic.related.map((article) => article.url),
+    })),
     selectedArticles: selectedEntries.map((entry) => ({
       ...entry,
+      officialBacked: entry.officialBacked ?? false,
+      evidenceStrength: entry.evidenceStrength ?? summarizeContextEvidence(state.contexts[entry.url]).label,
       sourceContext: state.contexts[entry.url] || null,
     })).filter((entry) => entry.url),
   };
@@ -1172,6 +1295,11 @@ function buildResearchTopics(entries, pinnedTopics) {
       topicNote: pinnedMap.get(topic.topicKey)?.note || "",
       articleCount: topic.articleCount,
       sourceCount: sources.length,
+      sourceTypes: unique(allArticles.map((article) => article.sourceType || "media")),
+      officialBackedCount: allArticles.filter((article) => isOfficialBacked(article)).length,
+      strongEvidenceCount: allArticles.filter((article) =>
+        summarizeContextEvidence(article.sourceContext).label === "high"
+      ).length,
       storyAngle: buildStoryAngle(topic.topicTitle, core, related),
       core,
       related,
@@ -1215,12 +1343,12 @@ function buildStoryAngle(topicTitle, core, related) {
   const relatedTitles = related.map((article) => article.title).slice(0, 2);
 
   if (coreTitles.length === 0) {
-    return `Focus on ${topicTitle} and confirm the source structure before writing.`;
+    return `先把「${topicTitle}」的來源結構確認清楚，再決定故事主線。`;
   }
 
-  let angle = `Lead with ${coreTitles.join(" / ")}.`;
+  let angle = `主軸先講 ${coreTitles.join(" / ")}。`;
   if (relatedTitles.length > 0) {
-    angle += ` Support it with ${relatedTitles.join(" / ")}.`;
+    angle += ` 再用 ${relatedTitles.join(" / ")} 補市場反應、背景或延伸意義。`;
   }
   return angle;
 }
@@ -1230,10 +1358,10 @@ function buildFactCheckItems(articles) {
     articles.flatMap((article) => {
       const checks = [];
       if (article.publishedAt) {
-        checks.push(`confirm timing for ${article.title}`);
+        checks.push(`確認「${article.title}」的時間點`);
       }
       if ((article.sourceContext?.numbersMentioned || []).length > 0) {
-        checks.push(`confirm key numbers for ${article.title}`);
+        checks.push(`確認「${article.title}」裡的關鍵數字`);
       }
       return checks;
     }),
@@ -1270,6 +1398,9 @@ function toMarkdown(payload) {
     }
     lines.push(`- articleCount: ${topic.articleCount}`);
     lines.push(`- sourceCount: ${topic.sourceCount}`);
+    lines.push(`- sourceTypes: ${topic.sourceTypes.join(", ")}`);
+    lines.push(`- officialBackedCount: ${topic.officialBackedCount}`);
+    lines.push(`- strongEvidenceCount: ${topic.strongEvidenceCount}`);
     lines.push(`- storyAngle: ${topic.storyAngle}`);
     if (topic.links.length) {
       lines.push(`- links:`);
@@ -1302,6 +1433,9 @@ function toMarkdown(payload) {
       lines.push(`- publishedAt: ${article.publishedAt || "no date"}`);
       lines.push(`- url: ${article.url}`);
       lines.push(`- sq/co/mr: ${article.sourceQualityScore}/${article.corroborationScore}/${article.marketReactionScore}`);
+      lines.push(`- sourceType: ${article.sourceType || "media"}`);
+      lines.push(`- officialBacked: ${Boolean(article.officialBacked)}`);
+      lines.push(`- evidenceStrength: ${article.evidenceStrength || "low"}`);
       if (article.sourceContext?.numbersMentioned?.length) {
         lines.push(`- numbers: ${article.sourceContext.numbersMentioned.join(", ")}`);
       }
@@ -1325,6 +1459,9 @@ function toMarkdown(payload) {
       lines.push(`- publishedAt: ${article.publishedAt || "no date"}`);
       lines.push(`- url: ${article.url}`);
       lines.push(`- sq/co/mr: ${article.sourceQualityScore}/${article.corroborationScore}/${article.marketReactionScore}`);
+      lines.push(`- sourceType: ${article.sourceType || "media"}`);
+      lines.push(`- officialBacked: ${Boolean(article.officialBacked)}`);
+      lines.push(`- evidenceStrength: ${article.evidenceStrength || "low"}`);
       if (article.sourceContext?.numbersMentioned?.length) {
         lines.push(`- numbers: ${article.sourceContext.numbersMentioned.join(", ")}`);
       }
@@ -1336,6 +1473,26 @@ function toMarkdown(payload) {
   }
 
   return lines.join("\n");
+}
+
+function isOfficialBacked(article) {
+  return article?.sourceType === "official" || (article?.sourceQualityScore ?? 0) >= 90;
+}
+
+function countOfficialBackedArticles(topic) {
+  if (!topic || !state.weekly) return 0;
+  return Object.values(state.weekly.categories || {})
+    .flat()
+    .filter((article) => topic.urls.includes(article.url))
+    .filter((article) => isOfficialBacked(article)).length;
+}
+
+function countStrongEvidenceArticles(topic) {
+  if (!topic || !state.weekly) return 0;
+  return Object.values(state.weekly.categories || {})
+    .flat()
+    .filter((article) => topic.urls.includes(article.url))
+    .filter((article) => summarizeContextEvidence(state.contexts[article.url]).label === "high").length;
 }
 
 function downloadFile(filename, content, type) {

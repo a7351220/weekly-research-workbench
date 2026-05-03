@@ -17,90 +17,113 @@
           <span id="status">idle</span>
           <span id="pinned-count">pinned: 0</span>
           <span id="selection-count">selected: 0</span>
+          <button id="settings-open" type="button" class="secondary small">settings</button>
         </div>
       </header>
 
+      <section class="controls-overlay" id="controls-overlay" hidden>
+        <div class="controls-backdrop" id="controls-backdrop"></div>
+        <div class="controls-shell">
+          <div class="controls-toolbar">
+            <div class="controls-title">settings</div>
+            <button id="settings-close" type="button" class="secondary small">close</button>
+          </div>
       <section class="controls">
-        <div class="control-group control-group-wide">
-          <label for="api-base">api_base</label>
-          <div class="masked-input-row">
-            <input
-              id="api-base"
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              value="https://weekly-rss-middleware.c7351220.workers.dev"
-            />
-            <button id="toggle-api-base" type="button" class="secondary toggle-secret">
-              show
-            </button>
-          </div>
-        </div>
-        <div class="control-group">
-          <label for="days">days</label>
-          <input id="days" type="number" min="1" max="30" value="7" />
-        </div>
-        <div class="control-group">
-          <label for="limit-per-source">limit_per_source</label>
-          <input id="limit-per-source" type="number" min="1" max="20" value="6" />
-        </div>
-        <div class="control-group">
-          <label for="max-items">max_items_per_category</label>
-          <input id="max-items" type="number" min="1" max="50" value="10" />
-        </div>
-        <div class="control-group control-group-categories">
-          <div class="source-header-row">
-            <label>categories</label>
-            <div class="source-actions">
-              <button id="categories-select-all" type="button" class="secondary small">all</button>
-              <button id="categories-select-default" type="button" class="secondary small">default</button>
+        <div class="controls-quick">
+          <div class="control-group control-group-wide">
+            <label for="api-base">api_base</label>
+            <div class="masked-input-row">
+              <input
+                id="api-base"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                value="https://weekly-rss-middleware.c7351220.workers.dev"
+              />
+              <button id="toggle-api-base" type="button" class="secondary toggle-secret">
+                show
+              </button>
             </div>
           </div>
-          <div id="categories-picker" class="categories-picker"></div>
-        </div>
-        <div class="control-group control-group-keyword">
-          <label for="keyword">keyword</label>
-          <input id="keyword" type="text" placeholder="optional" value="" />
-        </div>
-        <div class="control-group control-group-sources">
-          <div class="source-header-row">
-            <label>sources</label>
-            <div class="source-actions">
-              <button id="sources-select-all" type="button" class="secondary small">all</button>
-              <button id="sources-clear-all" type="button" class="secondary small">none</button>
-              <button id="sources-select-default" type="button" class="secondary small">default</button>
+          <div class="control-group">
+            <label for="days">days</label>
+            <input id="days" type="number" min="1" max="30" value="7" />
+          </div>
+          <div class="control-group control-group-categories">
+            <div class="source-header-row">
+              <label>categories</label>
+              <div class="source-actions">
+                <button id="categories-select-all" type="button" class="secondary small">all</button>
+                <button id="categories-select-default" type="button" class="secondary small">default</button>
+              </div>
             </div>
+            <div id="categories-picker" class="categories-picker"></div>
           </div>
-          <div id="sources-picker" class="sources-picker">loading sources...</div>
-        </div>
-        <div class="control-group control-group-signals">
-          <div class="source-header-row">
-            <label>signals</label>
-          </div>
-          <div class="signals-picker">
-            <label class="source-pill">
-              <input id="use-private-signals" type="checkbox" />
-              <span>private signals</span>
-            </label>
-            <label class="source-pill">
-              <input id="use-blockbeats" type="checkbox" />
-              <span>BlockBeats</span>
-            </label>
-            <label class="source-pill">
-              <input id="use-opennews" type="checkbox" />
-              <span>OpenNews</span>
-            </label>
-            <label class="source-pill">
-              <input id="use-twitter-kols" type="checkbox" />
-              <span>Twitter / X KOLs</span>
-            </label>
+          <div class="actions actions-quick">
+            <button id="load-weekly">load_weekly</button>
+            <button id="clear-selection" class="secondary">clear_selection</button>
+            <button id="export-json" class="secondary">export_json</button>
+            <button id="export-markdown" class="secondary">export_markdown</button>
           </div>
         </div>
-        <div class="actions">
-          <button id="load-weekly">load_weekly</button>
-          <button id="clear-selection" class="secondary">clear_selection</button>
-          <button id="export-json" class="secondary">export_json</button>
-          <button id="export-markdown" class="secondary">export_markdown</button>
+
+        <details class="controls-advanced">
+          <summary class="source-header-row">
+            <span>advanced settings</span>
+            <span class="summary-hint">sources / signals / keyword / limits</span>
+          </summary>
+          <div class="controls-advanced-grid">
+            <div class="control-group">
+              <label for="limit-per-source">limit_per_source</label>
+              <input id="limit-per-source" type="number" min="1" max="20" value="6" />
+            </div>
+            <div class="control-group">
+              <label for="max-items">max_items_per_category</label>
+              <input id="max-items" type="number" min="1" max="50" value="10" />
+            </div>
+            <div class="control-group control-group-keyword">
+              <label for="keyword">keyword</label>
+              <input id="keyword" type="text" placeholder="optional" value="" />
+            </div>
+            <details class="control-group control-group-sources control-group-collapsible">
+              <summary class="source-header-row">
+                <span>sources</span>
+                <span class="summary-hint">advanced</span>
+              </summary>
+              <div class="source-actions">
+                <button id="sources-select-all" type="button" class="secondary small">all</button>
+                <button id="sources-clear-all" type="button" class="secondary small">none</button>
+                <button id="sources-select-default" type="button" class="secondary small">default</button>
+              </div>
+              <div id="sources-picker" class="sources-picker">loading sources...</div>
+            </details>
+            <details class="control-group control-group-signals control-group-collapsible">
+              <summary class="source-header-row">
+                <span>signals</span>
+                <span class="summary-hint">advanced</span>
+              </summary>
+              <div class="signals-picker">
+                <label class="source-pill">
+                  <input id="use-private-signals" type="checkbox" />
+                  <span>private signals</span>
+                </label>
+                <label class="source-pill">
+                  <input id="use-blockbeats" type="checkbox" />
+                  <span>BlockBeats</span>
+                </label>
+                <label class="source-pill">
+                  <input id="use-opennews" type="checkbox" />
+                  <span>OpenNews</span>
+                </label>
+                <label class="source-pill">
+                  <input id="use-twitter-kols" type="checkbox" />
+                  <span>Twitter / X KOLs</span>
+                </label>
+              </div>
+            </details>
+          </div>
+        </details>
+      </section>
         </div>
       </section>
 
@@ -165,6 +188,14 @@
               <label class="checkbox-inline">
                 <input id="selected-only" type="checkbox" />
                 <span>selected only</span>
+              </label>
+              <label class="checkbox-inline">
+                <input id="official-only" type="checkbox" />
+                <span>official-backed</span>
+              </label>
+              <label class="checkbox-inline">
+                <input id="evidence-strong-only" type="checkbox" />
+                <span>evidence-strong</span>
               </label>
             </div>
             <div id="articles-list" class="scroll articles-scroll"></div>

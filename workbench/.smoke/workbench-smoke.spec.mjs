@@ -197,7 +197,9 @@ test('workbench smoke', async ({ page }) => {
   });
 
   await page.goto('http://127.0.0.1:4173');
+  await page.click('#settings-open');
   await page.click('#load-weekly');
+  await page.click('#settings-close');
   await expect(page.locator('#topics-meta')).toContainText('/');
 
   await page.click('#tab-clusters');

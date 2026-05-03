@@ -53,7 +53,7 @@ a {
 .shell {
   height: 100vh;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
   padding: 8px;
 }
@@ -105,10 +105,74 @@ a {
 .controls {
   background: var(--panel);
   padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.controls-overlay[hidden] {
+  display: none;
+}
+
+.controls-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.controls-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 24, 31, 0.4);
+}
+
+.controls-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1200px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin: 16px auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
   display: grid;
-  grid-template-columns: minmax(220px, 2.2fr) repeat(3, minmax(96px, 0.9fr)) minmax(220px, 1.8fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.controls-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.controls-title {
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.controls-quick {
+  display: grid;
+  grid-template-columns: minmax(220px, 2.2fr) minmax(96px, 0.8fr) minmax(320px, 2fr) auto;
   gap: 10px;
   align-items: start;
+}
+
+.controls-advanced {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 8px;
+}
+
+.controls-advanced-grid {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.8fr) minmax(120px, 1fr) minmax(220px, 1.6fr);
+  gap: 10px;
+  align-items: start;
+  margin-top: 8px;
 }
 
 .control-group {
@@ -117,32 +181,38 @@ a {
   gap: 6px;
 }
 
-.control-group-wide {
-  grid-column: span 2;
-}
-
-.control-group-sources {
-  grid-column: 1 / -1;
-  min-width: 0;
-}
-
-.control-group-signals {
-  grid-column: 1 / -1;
-  min-width: 0;
-}
-
-.control-group-categories {
-  grid-column: span 2;
-  min-width: 0;
-}
-
+.control-group-wide,
+.control-group-sources,
+.control-group-signals,
+.control-group-categories,
 .control-group-keyword {
-  grid-column: span 2;
   min-width: 0;
 }
 
 .control-group label {
   color: var(--muted);
+  text-transform: lowercase;
+}
+
+.control-group-collapsible {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 8px;
+}
+
+.control-group-collapsible > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.control-group-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary-hint {
+  color: var(--muted);
+  font-size: 12px;
   text-transform: lowercase;
 }
 
@@ -170,9 +240,14 @@ a {
 }
 
 .actions {
-  grid-column: span 6;
   display: flex;
   gap: 8px;
+}
+
+.actions-quick {
+  align-self: end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .small {
@@ -189,13 +264,15 @@ a {
 .source-actions {
   display: flex;
   gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 8px;
 }
 
 .sources-picker {
   border: 1px solid var(--border);
   background: var(--panel-2);
   padding: 8px;
-  max-height: 168px;
+  max-height: 120px;
   overflow: auto;
 }
 
@@ -209,6 +286,7 @@ a {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
+  margin-top: 8px;
 }
 
 .category-pill {
@@ -386,10 +464,13 @@ button.secondary {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .topic-card {
   margin-bottom: 8px;
+  min-width: 0;
 }
 
 .topic-item.active {
@@ -402,6 +483,20 @@ button.secondary {
 .evidence-card-title {
   color: var(--text);
   font-weight: 700;
+}
+
+.topic-item-title,
+.topic-item-summary,
+.topic-item-meta,
+.article-meta,
+.article-links,
+.context-title,
+.context-block,
+.context-quote,
+.evidence-note {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .article-item {
@@ -554,8 +649,20 @@ button.secondary {
 }
 
 @media (max-width: 1200px) {
+  .controls-quick,
+  .controls-advanced-grid,
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .controls-shell {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    margin: 8px;
+  }
+
+  .signals-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .panel-resizer {
