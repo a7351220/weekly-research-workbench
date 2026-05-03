@@ -29,6 +29,10 @@ export interface WeeklyQueryParams {
   includeTaiwan: boolean;
   categories: Category[];
   sources: string[] | null;
+  usePrivateSignals: boolean;
+  useBlockBeats: boolean;
+  useOpenNews: boolean;
+  useTwitterKols: boolean;
   keyword: string | null;
   maxItemsPerCategory: number;
 }
@@ -89,6 +93,10 @@ export interface WeeklyResponse {
     includeTaiwan: boolean;
     categories: Category[];
     sources: string[] | null;
+    usePrivateSignals: boolean;
+    useBlockBeats: boolean;
+    useOpenNews: boolean;
+    useTwitterKols: boolean;
     keyword: string | null;
     maxItemsPerCategory: number;
   };

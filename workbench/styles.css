@@ -126,6 +126,11 @@ a {
   min-width: 0;
 }
 
+.control-group-signals {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
 .control-group-categories {
   grid-column: span 2;
   min-width: 0;
@@ -197,6 +202,12 @@ a {
 .categories-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.signals-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 

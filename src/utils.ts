@@ -119,6 +119,10 @@ export function buildWeeklyParams(url: URL): WeeklyQueryParams {
     url.searchParams.get("sources"),
     url.searchParams.has("sources"),
   );
+  const usePrivateSignals = parseBoolean(url.searchParams.get("usePrivateSignals"), true);
+  const useBlockBeats = parseBoolean(url.searchParams.get("useBlockBeats"), true);
+  const useOpenNews = parseBoolean(url.searchParams.get("useOpenNews"), true);
+  const useTwitterKols = parseBoolean(url.searchParams.get("useTwitterKols"), true);
 
   return {
     days: parseNumber(url.searchParams.get("days"), 7, { min: 1, max: 30 }),
@@ -129,6 +133,10 @@ export function buildWeeklyParams(url: URL): WeeklyQueryParams {
     includeTaiwan,
     categories,
     sources,
+    usePrivateSignals,
+    useBlockBeats,
+    useOpenNews,
+    useTwitterKols,
     keyword: normalizeKeyword(url.searchParams.get("keyword")),
     maxItemsPerCategory: parseNumber(
       url.searchParams.get("maxItemsPerCategory"),

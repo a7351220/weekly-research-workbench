@@ -47,6 +47,10 @@ const elements = {
   sourcesSelectAll: document.querySelector("#sources-select-all"),
   sourcesClearAll: document.querySelector("#sources-clear-all"),
   sourcesSelectDefault: document.querySelector("#sources-select-default"),
+  usePrivateSignals: document.querySelector("#use-private-signals"),
+  useBlockBeats: document.querySelector("#use-blockbeats"),
+  useOpenNews: document.querySelector("#use-opennews"),
+  useTwitterKols: document.querySelector("#use-twitter-kols"),
   status: document.querySelector("#status"),
   pinnedCount: document.querySelector("#pinned-count"),
   selectionCount: document.querySelector("#selection-count"),
@@ -119,6 +123,14 @@ function bindEvents() {
   elements.sourcesSelectDefault.addEventListener("click", () => setDefaultSources());
   elements.categoriesSelectAll.addEventListener("click", () => setAllCategories(true));
   elements.categoriesSelectDefault.addEventListener("click", () => setDefaultCategories());
+  [
+    elements.usePrivateSignals,
+    elements.useBlockBeats,
+    elements.useOpenNews,
+    elements.useTwitterKols,
+  ].forEach((element) => {
+    element.addEventListener("change", handleSignalToggleChange);
+  });
   elements.apiBase.addEventListener("change", loadSources);
   bindResizer(elements.resizeTopics, "topics");
   bindResizer(elements.resizeContext, "context");
@@ -148,6 +160,10 @@ function hydrateControls() {
   elements.limitPerSource.value = filters.limitPerSource || elements.limitPerSource.value;
   elements.maxItems.value = filters.maxItems || elements.maxItems.value;
   elements.keyword.value = filters.keyword || "";
+  elements.usePrivateSignals.checked = filters.usePrivateSignals ?? true;
+  elements.useBlockBeats.checked = filters.useBlockBeats ?? true;
+  elements.useOpenNews.checked = filters.useOpenNews ?? true;
+  elements.useTwitterKols.checked = filters.useTwitterKols ?? true;
   state.selections = filters.selections || {};
   state.sort = {
     topics: filters.topicSort || "story",
@@ -167,6 +183,7 @@ function hydrateControls() {
   } else {
     setDefaultCategories();
   }
+  syncSignalToggleState();
 }
 
 async function loadSources() {
@@ -305,6 +322,18 @@ function handleCategoryPickerChange() {
   persistControls();
 }
 
+function handleSignalToggleChange() {
+  syncSignalToggleState();
+  persistControls();
+}
+
+function syncSignalToggleState() {
+  const enabled = elements.usePrivateSignals.checked;
+  [elements.useBlockBeats, elements.useOpenNews, elements.useTwitterKols].forEach((element) => {
+    element.disabled = !enabled;
+  });
+}
+
 function groupBy(items, keyFn) {
   const out = {};
   for (const item of items) {
@@ -334,6 +363,10 @@ function persistControls() {
     selectedCategories: getSelectedCategories(),
     keyword: elements.keyword.value,
     selectedSources: getSelectedSourceNames(),
+    usePrivateSignals: elements.usePrivateSignals.checked,
+    useBlockBeats: elements.useBlockBeats.checked,
+    useOpenNews: elements.useOpenNews.checked,
+    useTwitterKols: elements.useTwitterKols.checked,
     selections: state.selections,
     topicSort: state.sort.topics,
     articleSort: state.sort.articles,
@@ -444,6 +477,10 @@ async function handleLoadWeekly() {
     if (categories) params.set("categories", categories);
     if (keyword) params.set("keyword", keyword);
     params.set("sources", selectedSources.join(","));
+    params.set("usePrivateSignals", String(elements.usePrivateSignals.checked));
+    params.set("useBlockBeats", String(elements.useBlockBeats.checked));
+    params.set("useOpenNews", String(elements.useOpenNews.checked));
+    params.set("useTwitterKols", String(elements.useTwitterKols.checked));
 
     const response = await fetch(`${trimSlash(elements.apiBase.value)}/weekly?${params.toString()}`);
     if (!response.ok) {
@@ -1060,6 +1097,10 @@ function buildExportPayload() {
       includeTaiwan: getSelectedCategories().includes("taiwan_stocks"),
       categories: getSelectedCategories().join(",") || null,
       sources: getSelectedSourceNames(),
+      usePrivateSignals: elements.usePrivateSignals.checked,
+      useBlockBeats: elements.useBlockBeats.checked,
+      useOpenNews: elements.useOpenNews.checked,
+      useTwitterKols: elements.useTwitterKols.checked,
       keyword: elements.keyword.value.trim() || null,
     },
     pinnedTopics,
@@ -1180,6 +1221,10 @@ function toMarkdown(payload) {
     `- maxItemsPerCategory: ${payload.params.maxItemsPerCategory}`,
     `- includeTaiwan: ${payload.params.includeTaiwan}`,
     `- categories: ${payload.params.categories || "all"}`,
+    `- privateSignals: ${payload.params.usePrivateSignals}`,
+    `- blockBeats: ${payload.params.useBlockBeats}`,
+    `- openNews: ${payload.params.useOpenNews}`,
+    `- twitterKols: ${payload.params.useTwitterKols}`,
     `- keyword: ${payload.params.keyword || "none"}`,
     ``,
   ];

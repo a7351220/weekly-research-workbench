@@ -7,7 +7,7 @@ import {
   sortItemsForWeekly,
 } from "./editorial";
 import { fetchFeed } from "./rss";
-import { loadEditorialCache, refreshEditorialCache } from "./signals";
+import { filterEditorialCachePayload, loadEditorialCache, refreshEditorialCache } from "./signals";
 import { buildSourceContextResponse, parseSourceContextParams } from "./source-context";
 import type {
   Category,
@@ -128,6 +128,12 @@ async function handleWeekly(url: URL, env: Env): Promise<Response> {
   if (!editorialCache && hasEditorialSecrets(env)) {
     editorialCache = await refreshEditorialCache(env);
   }
+  editorialCache = filterEditorialCachePayload(editorialCache, {
+    usePrivateSignals: params.usePrivateSignals,
+    useBlockBeats: params.useBlockBeats,
+    useOpenNews: params.useOpenNews,
+    useTwitterKols: params.useTwitterKols,
+  });
 
   const failedFeeds = results
     .filter((result) => result.failedFeed)
@@ -172,6 +178,10 @@ async function handleWeekly(url: URL, env: Env): Promise<Response> {
       includeTaiwan: params.includeTaiwan,
       categories: params.categories,
       sources: params.sources,
+      usePrivateSignals: params.usePrivateSignals,
+      useBlockBeats: params.useBlockBeats,
+      useOpenNews: params.useOpenNews,
+      useTwitterKols: params.useTwitterKols,
       keyword: params.keyword,
       maxItemsPerCategory: params.maxItemsPerCategory,
     },

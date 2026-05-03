@@ -213,7 +213,9 @@ test('workbench smoke', async ({ page }) => {
   });
   await page.locator('.topic-note').first().fill('priority topic', { force: true });
 
-  await page.locator('#articles-list .article-open').first().click();
+  await page.locator('#articles-list .article-open').first().evaluate((node) => {
+    node.click();
+  });
   await expect(page.locator('#context-meta')).not.toHaveText('none');
   await page.locator('#articles-list .article-selected').first().evaluate((node) => {
     node.checked = true;

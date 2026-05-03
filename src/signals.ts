@@ -1,6 +1,7 @@
 import {
   buildTopicKey,
   categoryForSignal,
+  clusterEditorialSignals,
   scoreBaseEditorial,
 } from "./editorial";
 import type { EditorialCachePayload, EditorialSignalItem, Env, FeedItem } from "./types";
@@ -56,6 +57,50 @@ export async function loadEditorialCache(
   }
   const cached = await env.EDITORIAL_CACHE.get(SIGNAL_CACHE_KEY, "json");
   return cached as EditorialCachePayload | null;
+}
+
+export function filterEditorialCachePayload(
+  payload: EditorialCachePayload | null,
+  options: {
+    usePrivateSignals: boolean;
+    useBlockBeats: boolean;
+    useOpenNews: boolean;
+    useTwitterKols: boolean;
+  },
+): EditorialCachePayload | null {
+  if (!payload || !options.usePrivateSignals) {
+    return null;
+  }
+
+  const signals = payload.signals.filter((signal) => {
+    if (signal.source === "blockbeats") {
+      return options.useBlockBeats;
+    }
+    if (signal.source === "opennews") {
+      return options.useOpenNews;
+    }
+    if (signal.source.startsWith("twitter/")) {
+      return options.useTwitterKols;
+    }
+    return true;
+  });
+
+  if (signals.length === 0) {
+    return null;
+  }
+
+  const topics = clusterEditorialSignals(signals);
+  return {
+    ...payload,
+    signals,
+    topics,
+    stats: {
+      blockbeats: signals.filter((signal) => signal.source === "blockbeats").length,
+      opennews: signals.filter((signal) => signal.source === "opennews").length,
+      twitter: signals.filter((signal) => signal.source.startsWith("twitter/")).length,
+      topics: topics.length,
+    },
+  };
 }
 
 async function fetchEditorialSignals(env: Env): Promise<EditorialSignalItem[]> {

@@ -473,6 +473,14 @@ components:
                 - "null"
               items:
                 type: string
+            usePrivateSignals:
+              type: boolean
+            useBlockBeats:
+              type: boolean
+            useOpenNews:
+              type: boolean
+            useTwitterKols:
+              type: boolean
             keyword:
               type:
                 - string
@@ -485,6 +493,10 @@ components:
             - includeTaiwan
             - categories
             - sources
+            - usePrivateSignals
+            - useBlockBeats
+            - useOpenNews
+            - useTwitterKols
             - keyword
             - maxItemsPerCategory
         summary:
@@ -596,6 +608,30 @@ paths:
             type: string
             example: CoinDesk,OpenAI News
           description: Comma-separated source names. Send an empty value to fetch no sources.
+        - in: query
+          name: usePrivateSignals
+          schema:
+            type: boolean
+            default: true
+          description: Enable private enrichment signals for ranking and clustering.
+        - in: query
+          name: useBlockBeats
+          schema:
+            type: boolean
+            default: true
+          description: Include BlockBeats enrichment signals.
+        - in: query
+          name: useOpenNews
+          schema:
+            type: boolean
+            default: true
+          description: Include OpenNews enrichment signals.
+        - in: query
+          name: useTwitterKols
+          schema:
+            type: boolean
+            default: true
+          description: Include Twitter/X KOL enrichment signals.
         - in: query
           name: keyword
           schema:
