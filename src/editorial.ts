@@ -1120,10 +1120,19 @@ function deriveBundleKind(
   }
 
   if (categories.length === 1 && categories[0] === "taiwan_stocks") {
+    const aiClusters = component.filter((cluster) =>
+      cluster.topicTags.some((tag) =>
+        ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag),
+      ),
+    );
+    const etfClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_etf_flows"));
+    const policyClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_policy"));
+    const aiScore = aiClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
+    const etfScore = etfClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
+
     if (
-      topicTags.includes("taiwan_ai_supply_chain") ||
-      topicTags.includes("taiwan_data_center") ||
-      topicTags.includes("taiwan_semis")
+      aiClusters.length >= 2 ||
+      (aiClusters.length >= 1 && aiScore >= etfScore + 40)
     ) {
       return {
         key: "taiwan-ai-supply-chain",
@@ -1133,7 +1142,7 @@ function deriveBundleKind(
       };
     }
 
-    if (topicTags.includes("taiwan_etf_flows")) {
+    if (etfClusters.length >= 1) {
       return {
         key: "taiwan-etf-flows",
         title: "台股 ETF 與資金輪動包",
@@ -1142,7 +1151,7 @@ function deriveBundleKind(
       };
     }
 
-    if (topicTags.includes("taiwan_policy")) {
+    if (policyClusters.length >= 1) {
       return {
         key: "taiwan-policy-disclosure",
         title: "台股政策與公告主線包",
