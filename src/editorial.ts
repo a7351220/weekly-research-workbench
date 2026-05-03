@@ -157,6 +157,30 @@ const TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET = new Set([
   "TechNews Finance",
 ]);
 
+const TAIWAN_SUPPLY_CHAIN_PATTERN =
+  /(台積電|鴻海|廣達|緯創|緯穎|技嘉|英業達|台達電|光寶科|欣興|南電|聯發科|創意|世芯|日月光|京元電|金像電|智邦|奇鋐|雙鴻|台燿|信驊|神達|仁寶|和碩|華碩|宏碁|微星|台廠|供應鏈|AI伺服器|資料中心|載板|散熱|PCB|CPO|矽光子|2奈米|先進封裝)/i;
+
+function isTaiwanSupplyChainStory(
+  text: string,
+  topicEntities: string[],
+  topicTags: string[],
+): boolean {
+  if (TAIWAN_SUPPLY_CHAIN_PATTERN.test(text)) {
+    return true;
+  }
+
+  if (
+    topicEntities.some((entity) =>
+      ["tsmc", "honhai", "liteon", "mediatek", "nvidia", "amd", "intel"].includes(entity),
+    ) &&
+    topicTags.some((tag) => ["ai_infra", "earnings", "price_action"].includes(tag))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function scoreBaseEditorial(item: FeedItem): {
   score: number;
   signals: string[];
@@ -329,6 +353,12 @@ export function scoreBaseEditorial(item: FeedItem): {
   }
 
   if (item.category === "taiwan_stocks") {
+    const isSupplyChainStory = isTaiwanSupplyChainStory(
+      text,
+      Array.from(topicEntities),
+      Array.from(topicTags),
+    );
+
     if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
       score += 12;
       signals.add("taiwan_hard_source_fit");
@@ -336,16 +366,17 @@ export function scoreBaseEditorial(item: FeedItem): {
       score += 6;
       signals.add("taiwan_story_source_fit");
     } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
-      score += 3;
-      signals.add("taiwan_industry_context_fit");
+      score += isSupplyChainStory ? 12 : 3;
+      signals.add(
+        isSupplyChainStory
+          ? "taiwan_industry_supply_chain_fit"
+          : "taiwan_industry_context_fit",
+      );
     }
 
     if (
       TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source) &&
-      !Array.from(topicEntities).some((entity) =>
-        ["tsmc", "honhai", "liteon", "mediatek", "nvidia", "amd", "intel"].includes(entity),
-      ) &&
-      !/(台積電|鴻海|廣達|緯創|緯穎|技嘉|英業達|台達電|光寶科|欣興|南電|聯發科|創意|世芯)/i.test(text)
+      !isSupplyChainStory
     ) {
       score -= 6;
       signals.add("penalty:taiwan_context_not_localized");
@@ -575,12 +606,18 @@ function scoreSourceQuality(
   }
 
   if (item.category === "taiwan_stocks") {
+    const isSupplyChainStory = isTaiwanSupplyChainStory(
+      `${item.title} ${item.description}`,
+      topicEntities,
+      topicTags,
+    );
+
     if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
       score += 10;
     } else if (TAIWAN_LOCAL_STORY_SOURCE_SET.has(item.source)) {
       score += 4;
     } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
-      score -= 6;
+      score += isSupplyChainStory ? 6 : -6;
     }
   }
 
