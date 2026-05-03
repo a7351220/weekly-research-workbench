@@ -162,21 +162,28 @@ const TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET = new Set([
 const TAIWAN_SUPPLY_CHAIN_PATTERN =
   /(台積電|鴻海|廣達|緯創|緯穎|技嘉|英業達|台達電|光寶科|欣興|南電|聯發科|創意|世芯|日月光|京元電|金像電|智邦|奇鋐|雙鴻|台燿|信驊|神達|仁寶|和碩|華碩|宏碁|微星|台廠|供應鏈|AI伺服器|資料中心|載板|散熱|PCB|CPO|矽光子|2奈米|先進封裝)/i;
 
+const TAIWAN_AI_CONTEXT_PATTERN =
+  /(\bai\b|人工智慧|資料中心|data center|csp|gpu|asic|伺服器|server|算力|nvidia|amd|intel|rubin|blackwell|h100|h200|b200|cloud|雲端|電源|散熱|載板|cpo|矽光子|先進封裝|2奈米)/i;
+
 function isTaiwanSupplyChainStory(
   text: string,
   topicEntities: string[],
   topicTags: string[],
 ): boolean {
-  if (TAIWAN_SUPPLY_CHAIN_PATTERN.test(text)) {
+  if (TAIWAN_SUPPLY_CHAIN_PATTERN.test(text) && TAIWAN_AI_CONTEXT_PATTERN.test(text)) {
     return true;
   }
 
   if (
     topicEntities.some((entity) =>
-      ["tsmc", "honhai", "liteon", "mediatek", "nvidia", "amd", "intel"].includes(entity),
+      ["nvidia", "amd", "intel"].includes(entity),
     ) &&
-    topicTags.some((tag) => ["ai_infra", "earnings", "price_action"].includes(tag))
+    topicTags.some((tag) => ["ai_infra", "chips", "earnings"].includes(tag))
   ) {
+    return true;
+  }
+
+  if (/(AI伺服器|資料中心|cpo|矽光子|先進封裝|2奈米)/i.test(text)) {
     return true;
   }
 
@@ -1121,9 +1128,9 @@ function deriveBundleKind(
 
   if (categories.length === 1 && categories[0] === "taiwan_stocks") {
     const aiClusters = component.filter((cluster) =>
-      cluster.topicTags.some((tag) =>
-        ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag),
-      ),
+      cluster.topicTags.includes("taiwan_ai_supply_chain") ||
+      cluster.topicTags.includes("taiwan_data_center") ||
+      (cluster.topicTags.includes("taiwan_semis") && cluster.topicTags.includes("ai_infra")),
     );
     const etfClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_etf_flows"));
     const policyClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_policy"));
