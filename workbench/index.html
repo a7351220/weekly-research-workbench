@@ -154,6 +154,8 @@
                 <input id="hide-weak-topics" type="checkbox" />
                 <span>hide weak</span>
               </label>
+              <button id="merge-topics" type="button" class="secondary small">merge selected</button>
+              <button id="clear-merge-selection" type="button" class="secondary small">clear merge</button>
             </div>
             <div id="topics-list" class="scroll topics-scroll"></div>
           </div>
@@ -234,9 +236,14 @@
         </button>
         <div class="topic-actions">
           <label class="checkbox-inline">
+            <input class="topic-merge" type="checkbox" />
+            <span>merge</span>
+          </label>
+          <label class="checkbox-inline">
             <input class="topic-pinned" type="checkbox" />
             <span>pin</span>
           </label>
+          <button class="topic-split secondary small" type="button" hidden>split</button>
           <input class="topic-note" type="text" placeholder="topic note" />
         </div>
       </div>

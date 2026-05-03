@@ -545,10 +545,12 @@ button.secondary {
   gap: 8px;
   align-items: center;
   padding: 6px 2px 0;
+  flex-wrap: wrap;
 }
 
 .topic-note {
   flex: 1;
+  min-width: 160px;
 }
 
 .article-note {

@@ -14,6 +14,7 @@ const AVAILABLE_CATEGORIES = [
 const state = {
   weekly: null,
   topics: [],
+  mergedTopics: [],
   topicGroups: {
     bundle: [],
     cluster: [],
@@ -84,6 +85,8 @@ const elements = {
   selectedOnly: document.querySelector("#selected-only"),
   officialOnly: document.querySelector("#official-only"),
   evidenceStrongOnly: document.querySelector("#evidence-strong-only"),
+  mergeTopics: document.querySelector("#merge-topics"),
+  clearMergeSelection: document.querySelector("#clear-merge-selection"),
 };
 
 init();
@@ -138,6 +141,8 @@ function bindEvents() {
     persistControls();
     renderArticles();
   });
+  elements.mergeTopics.addEventListener("click", handleMergeTopics);
+  elements.clearMergeSelection.addEventListener("click", handleClearMergeSelection);
   elements.toggleApiBase.addEventListener("click", toggleApiBaseVisibility);
   elements.sourcesSelectAll.addEventListener("click", () => setAllSources(true));
   elements.sourcesClearAll.addEventListener("click", () => setAllSources(false));
@@ -199,6 +204,7 @@ function hydrateControls() {
   elements.useOpenNews.checked = filters.useOpenNews ?? true;
   elements.useTwitterKols.checked = filters.useTwitterKols ?? true;
   state.selections = filters.selections || {};
+  state.mergedTopics = filters.mergedTopics || [];
   state.sort = {
     topics: filters.topicSort || "story",
     articles: filters.articleSort || "editorial",
@@ -433,6 +439,7 @@ function persistControls() {
     selectedOnly: state.sort.selectedOnly,
     officialOnly: state.sort.officialOnly,
     evidenceStrongOnly: state.sort.evidenceStrongOnly,
+    mergedTopics: state.mergedTopics,
     topicsWidth: getLayoutWidth("topics"),
     contextWidth: getLayoutWidth("context"),
   };
@@ -666,9 +673,39 @@ function buildTopics(weekly) {
     });
   }
 
+  for (const merged of state.mergedTopics || []) {
+    const memberTopics = merged.topicKeys
+      .map((key) => topicMap.get(key))
+      .filter(Boolean);
+    const mergedItems = unique(memberTopics.flatMap((topic) => topic.urls))
+      .map((url) => itemsByCategory.find((item) => item.url === url))
+      .filter(Boolean);
+    if (!mergedItems.length) continue;
+    topicMap.set(merged.id, {
+      key: merged.id,
+      type: "merged",
+      title: `[merged] ${merged.title}`,
+      summary: merged.note || memberTopics.map((topic) => topic.title).slice(0, 3).join(" / "),
+      categories: unique(mergedItems.map((item) => item.category)),
+      itemCount: mergedItems.length,
+      sourceCount: unique(mergedItems.map((item) => item.source)).length,
+      itemIds: mergedItems.map((item) => item.id),
+      urls: mergedItems.map((item) => item.url),
+      clusterKeys: memberTopics.flatMap((topic) => topic.clusterKeys || []),
+      scores: summarizeScores(mergedItems),
+      sourceLinks: mergedItems.map((item) => ({
+        title: item.title,
+        url: item.url,
+        source: item.source,
+        publishedAt: item.publishedAt,
+      })),
+      mergeMemberKeys: merged.topicKeys,
+    });
+  }
+
   return Array.from(topicMap.values()).sort((a, b) => {
     if (a.type !== b.type) {
-      const rank = { bundle: 0, cluster: 1, fallback: 2 };
+      const rank = { merged: 0, bundle: 1, cluster: 2, fallback: 3 };
       return rank[a.type] - rank[b.type];
     }
     return b.itemCount - a.itemCount;
@@ -732,6 +769,8 @@ function renderTopics() {
     const summary = fragment.querySelector(".topic-item-summary");
     const meta = fragment.querySelector(".topic-item-meta");
     const pinned = fragment.querySelector(".topic-pinned");
+    const merge = fragment.querySelector(".topic-merge");
+    const split = fragment.querySelector(".topic-split");
     const note = fragment.querySelector(".topic-note");
 
     title.textContent = topic.title;
@@ -743,6 +782,8 @@ function renderTopics() {
     const topicState = state.selections[`topic:${topic.key}`] || {};
     pinned.checked = Boolean(topicState.pinned);
     note.value = topicState.note || "";
+    merge.checked = Boolean(state.selections[`merge:${topic.key}`]?.selected);
+    split.hidden = topic.type !== "merged";
 
     if (topic.key === state.selectedTopicKey) {
       button.classList.add("active");
@@ -754,6 +795,16 @@ function renderTopics() {
       renderTopics();
       renderArticles();
       renderContext();
+    });
+
+    merge.addEventListener("change", () => {
+      state.selections[`merge:${topic.key}`] = {
+        ...(state.selections[`merge:${topic.key}`] || {}),
+        selected: merge.checked,
+        topicKey: topic.key,
+        topicTitle: topic.title,
+      };
+      persistControls();
     });
 
     pinned.addEventListener("change", () => {
@@ -777,6 +828,10 @@ function renderTopics() {
         topicTitle: topic.title,
       };
       persistControls();
+    });
+
+    split.addEventListener("click", () => {
+      splitMergedTopic(topic.key);
     });
 
     elements.topicsList.appendChild(fragment);
@@ -815,7 +870,7 @@ function getFirstNonEmptyTopicTab() {
 
 function getTopicTabCounts() {
   return {
-    bundle: (state.topicGroups.bundle || []).length,
+    bundle: (state.topicGroups.bundle || []).length + state.topics.filter((topic) => topic.type === "merged").length,
     cluster: (state.topicGroups.cluster || []).length,
     fallback: (state.topicGroups.fallback || []).length,
   };
@@ -828,6 +883,12 @@ function formatTopicMeta(visibleCount, totalCount) {
 
 function getVisibleTopics() {
   let topics = [...(state.topicGroups[state.activeTopicTab] || [])];
+  if (state.activeTopicTab === "bundle") {
+    topics = [
+      ...state.topics.filter((topic) => topic.type === "merged"),
+      ...topics,
+    ];
+  }
 
   if (state.sort.hideWeakTopics) {
     const selectedCategories = getSelectedCategories();
@@ -858,6 +919,64 @@ function getVisibleTopics() {
   const rank = rankers[state.sort.topics] || rankers.story;
   topics.sort((a, b) => rank(b) - rank(a));
   return topics;
+}
+
+function handleMergeTopics() {
+  const selected = Object.entries(state.selections)
+    .filter(([key, entry]) => key.startsWith("merge:") && entry?.selected)
+    .map(([, entry]) => entry.topicKey)
+    .filter(Boolean);
+  const uniqueKeys = unique(selected);
+  if (uniqueKeys.length < 2) {
+    setStatus("select at least 2 topics to merge");
+    return;
+  }
+  const sourceTopics = uniqueKeys
+    .map((key) => state.topics.find((topic) => topic.key === key))
+    .filter(Boolean);
+  const title = sourceTopics.map((topic) => topic.title.replace(/^\[[^\]]+\]\s*/, "")).slice(0, 2).join(" + ");
+  const id = `merged:${Date.now()}`;
+  state.mergedTopics.push({
+    id,
+    title,
+    topicKeys: uniqueKeys,
+    note: "",
+  });
+  for (const key of Object.keys(state.selections)) {
+    if (key.startsWith("merge:")) {
+      delete state.selections[key];
+    }
+  }
+  state.topics = buildTopics(state.weekly);
+  state.selectedTopicKey = id;
+  persistControls();
+  renderTopics();
+  renderArticles();
+  renderContext();
+  setStatus(`merged ${uniqueKeys.length} topics`);
+}
+
+function handleClearMergeSelection() {
+  for (const key of Object.keys(state.selections)) {
+    if (key.startsWith("merge:")) {
+      delete state.selections[key];
+    }
+  }
+  persistControls();
+  renderTopics();
+  setStatus("merge selection cleared");
+}
+
+function splitMergedTopic(topicKey) {
+  state.mergedTopics = state.mergedTopics.filter((topic) => topic.id !== topicKey);
+  delete state.selections[`topic:${topicKey}`];
+  state.topics = buildTopics(state.weekly);
+  state.selectedTopicKey = getVisibleTopics()[0]?.key || null;
+  persistControls();
+  renderTopics();
+  renderArticles();
+  renderContext();
+  setStatus("merged topic split");
 }
 
 function renderArticles() {
@@ -1191,7 +1310,9 @@ function handleClearSelection() {
 }
 
 function updateSelectionCount() {
-  const selectedArticles = Object.keys(state.selections).filter((key) => !key.startsWith("topic:")).length;
+  const selectedArticles = Object.keys(state.selections).filter((key) =>
+    !key.startsWith("topic:") && !key.startsWith("merge:")
+  ).length;
   const pinnedTopics = Object.values(state.selections).filter((entry) => entry?.pinned).length;
   elements.selectionCount.textContent = `selected: ${selectedArticles}`;
   elements.pinnedCount.textContent = `pinned: ${pinnedTopics}`;
