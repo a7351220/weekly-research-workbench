@@ -11,6 +11,21 @@ const AVAILABLE_CATEGORIES = [
   { value: "taiwan_stocks", label: "台股 / taiwan_stocks" },
 ];
 
+const TOPIC_TAG_LABELS = {
+  taiwan_ai_supply_chain: "AI 供應鏈",
+  taiwan_semis: "半導體",
+  taiwan_pcb: "PCB / 載板",
+  taiwan_etf_flows: "ETF / 資金流",
+  taiwan_policy: "政策 / 公告",
+  taiwan_data_center: "資料中心",
+  ai_infra: "AI 基建",
+  earnings: "財報",
+  fund_flows: "資金流",
+  policy: "政策",
+  index_move: "指數 / 價格",
+  price_action: "價格反應",
+};
+
 const state = {
   weekly: null,
   topics: [],
@@ -589,6 +604,7 @@ function buildTopics(weekly) {
         type: "bundle",
         title: `[bundle] ${bundle.title}`,
         summary: bundle.summary || bundle.angle || bundle.whyGrouped || "",
+        topicTags: bundle.marketThemes || [],
         categories: bundle.categories || [],
         itemCount: bundleItems.length,
         sourceCount: bundle.sourceCount || unique(bundleItems.map((item) => item.source)).length,
@@ -615,6 +631,7 @@ function buildTopics(weekly) {
         type: "cluster",
         title: `[cluster] ${formatClusterTitle(cluster.title, cluster.majorEntity)}`,
         summary: [cluster.marketTheme, cluster.eventType, cluster.majorEntity].filter(Boolean).join(" / "),
+        topicTags: cluster.topicTags || [],
         categories: [cluster.category],
         itemCount: cluster.itemCount,
         sourceCount: cluster.sourceCount,
@@ -657,6 +674,7 @@ function buildTopics(weekly) {
       summary: [first.category, first.marketTheme, first.eventType, first.majorEntity]
         .filter(Boolean)
         .join(" / "),
+      topicTags: unique(group.flatMap((item) => item.topicTags || [])),
       categories: unique(group.map((item) => item.category)),
       itemCount: group.length,
       sourceCount: unique(group.map((item) => item.source)).length,
@@ -686,6 +704,7 @@ function buildTopics(weekly) {
       type: "merged",
       title: `[merged] ${merged.title}`,
       summary: merged.note || memberTopics.map((topic) => topic.title).slice(0, 3).join(" / "),
+      topicTags: unique(mergedItems.flatMap((item) => item.topicTags || [])),
       categories: unique(mergedItems.map((item) => item.category)),
       itemCount: mergedItems.length,
       sourceCount: unique(mergedItems.map((item) => item.source)).length,
@@ -767,6 +786,7 @@ function renderTopics() {
     const button = fragment.querySelector(".topic-item");
     const title = fragment.querySelector(".topic-item-title");
     const summary = fragment.querySelector(".topic-item-summary");
+    const tags = fragment.querySelector(".topic-item-tags");
     const meta = fragment.querySelector(".topic-item-meta");
     const pinned = fragment.querySelector(".topic-pinned");
     const merge = fragment.querySelector(".topic-merge");
@@ -775,6 +795,7 @@ function renderTopics() {
 
     title.textContent = topic.title;
     summary.textContent = topic.summary || "no summary";
+    tags.innerHTML = renderTopicTagBadges(topic.topicTags || [], topic.categories || []);
     meta.textContent = `${topic.itemCount} articles / ${topic.sourceCount} sources / ${topic.categories.join(", ")} / sq ${topic.scores.sourceQualityScore} / co ${topic.scores.corroborationScore} / mr ${topic.scores.marketReactionScore}`;
     const officialBackedCount = countOfficialBackedArticles(topic);
     const strongEvidenceCount = countStrongEvidenceArticles(topic);
@@ -836,6 +857,36 @@ function renderTopics() {
 
     elements.topicsList.appendChild(fragment);
   }
+}
+
+function renderTopicTagBadges(topicTags, categories) {
+  const preferred = [];
+  const tags = Array.isArray(topicTags) ? topicTags : [];
+  const categorySet = new Set(categories || []);
+
+  if (categorySet.has("taiwan_stocks")) {
+    for (const key of [
+      "taiwan_ai_supply_chain",
+      "taiwan_semis",
+      "taiwan_pcb",
+      "taiwan_data_center",
+      "taiwan_etf_flows",
+      "taiwan_policy",
+    ]) {
+      if (tags.includes(key)) preferred.push(key);
+    }
+  }
+
+  for (const key of tags) {
+    if (TOPIC_TAG_LABELS[key] && !preferred.includes(key)) {
+      preferred.push(key);
+    }
+  }
+
+  return preferred.slice(0, 4).map((key) => {
+    const label = TOPIC_TAG_LABELS[key] || key;
+    return `<span class="badge">${escapeHtml(label)}</span>`;
+  }).join("");
 }
 
 function renderTabs() {

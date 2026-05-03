@@ -359,6 +359,25 @@ export function scoreBaseEditorial(item: FeedItem): {
       Array.from(topicTags),
     );
 
+    if (/(台積電|聯發科|世芯|創意|日月光|京元電|2奈米|先進封裝|半導體)/i.test(text)) {
+      topicTags.add("taiwan_semis");
+    }
+    if (/(欣興|南電|金像電|PCB|載板)/i.test(text)) {
+      topicTags.add("taiwan_pcb");
+    }
+    if (/(ETF|高股息|主動式ETF|0050|006208|00940|00919|00878|基金|殖利率|配息)/i.test(text)) {
+      topicTags.add("taiwan_etf_flows");
+    }
+    if (/(證交所|櫃買中心|金管會|MOPS|重大訊息|掛牌上市|融資融券|公開資訊觀測站)/i.test(text)) {
+      topicTags.add("taiwan_policy");
+    }
+    if (/(資料中心|data center|機房|雲端|CSP)/i.test(text)) {
+      topicTags.add("taiwan_data_center");
+    }
+    if (isSupplyChainStory) {
+      topicTags.add("taiwan_ai_supply_chain");
+    }
+
     if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
       score += 12;
       signals.add("taiwan_hard_source_fit");
