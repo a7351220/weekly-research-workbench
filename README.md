@@ -200,7 +200,13 @@ Optional category:
 - TWSE News — `https://www.twse.com.tw/rwd/zh/news/feed?type=rss`
 - CNA Finance — `https://feeds.feedburner.com/rsscna/finance`
 - MoneyDJ Finance News — `https://www.moneydj.com/kmdj/RssCenter.aspx?svc=NW&fno=1&arg=X0000000`
+- MOPS Material Information 201001 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201001.xml`
+- MOPS Material Information 201002 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201002.xml`
+- MOPS Material Information 201003 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201003.xml`
 - Yahoo Taiwan Stock News — `https://tw.stock.yahoo.com/rss?category=tw-market`
+- Yahoo Taiwan Stock News Feed — `https://tw.stock.yahoo.com/rss?category=news`
+- Yahoo Taiwan Stock Research — `https://tw.stock.yahoo.com/rss?category=research`
+- Yahoo Taiwan Funds News — `https://tw.stock.yahoo.com/rss?category=funds-news`
 - Cnyes Taiwan Stock News (HTML feed parser) — `https://news.cnyes.com/news/cat/tw_stock_news`
 - UDN Taiwan Stock News (HTML feed parser) — `https://money.udn.com/money/cate/5594`
 

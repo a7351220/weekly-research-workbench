@@ -185,8 +185,15 @@ function matchSourceName(articleUrl: string): string | null {
 
   for (const source of SOURCES) {
     try {
-      const sourceHost = new URL(source.url).hostname.replace(/^www\./, "");
-      if (hostname === sourceHost || hostname.endsWith(`.${sourceHost}`) || sourceHost.endsWith(`.${hostname}`)) {
+      const hosts = [
+        new URL(source.url).hostname.replace(/^www\./, ""),
+        ...(source.articleHosts ?? []).map((host) => host.replace(/^www\./, "")),
+      ];
+      if (hosts.some((sourceHost) =>
+        hostname === sourceHost ||
+        hostname.endsWith(`.${sourceHost}`) ||
+        sourceHost.endsWith(`.${hostname}`)
+      )) {
         return source.name;
       }
     } catch {

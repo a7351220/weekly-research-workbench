@@ -57,7 +57,10 @@ export async function fetchFeed(
       };
     }
 
-    const xml = await response.text();
+    const xml =
+      source.fetchMode === "rss-big5"
+        ? await decodeResponseText(response, "big5")
+        : await response.text();
     const parsed = parser.parse(xml) as XmlNode;
     const rawItems = extractEntries(parsed).slice(0, params.limitPerSource);
 
@@ -92,6 +95,18 @@ export async function fetchFeed(
         status: null,
       },
     };
+  }
+}
+
+async function decodeResponseText(
+  response: Response,
+  encoding: string,
+): Promise<string> {
+  const buffer = await response.arrayBuffer();
+  try {
+    return new TextDecoder(encoding).decode(buffer);
+  } catch {
+    return new TextDecoder().decode(buffer);
   }
 }
 
