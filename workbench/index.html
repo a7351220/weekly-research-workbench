@@ -48,14 +48,15 @@
           <label for="max-items">max_items_per_category</label>
           <input id="max-items" type="number" min="1" max="50" value="10" />
         </div>
-        <div class="control-group control-group-wide">
-          <label for="categories">categories</label>
-          <input
-            id="categories"
-            type="text"
-            placeholder="crypto,us_stocks_macro,ai"
-            value=""
-          />
+        <div class="control-group control-group-categories">
+          <div class="source-header-row">
+            <label>categories</label>
+            <div class="source-actions">
+              <button id="categories-select-all" type="button" class="secondary small">all</button>
+              <button id="categories-select-default" type="button" class="secondary small">default</button>
+            </div>
+          </div>
+          <div id="categories-picker" class="categories-picker"></div>
         </div>
         <div class="control-group control-group-wide">
           <label for="keyword">keyword</label>

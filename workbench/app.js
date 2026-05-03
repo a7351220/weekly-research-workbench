@@ -4,6 +4,13 @@ const DEFAULT_LAYOUT = {
   contextWidth: 420,
 };
 
+const AVAILABLE_CATEGORIES = [
+  { value: "crypto", label: "幣圈 / crypto" },
+  { value: "us_stocks_macro", label: "美股 / us_stocks_macro" },
+  { value: "ai", label: "AI" },
+  { value: "taiwan_stocks", label: "台股 / taiwan_stocks" },
+];
+
 const state = {
   weekly: null,
   topics: [],
@@ -32,7 +39,9 @@ const elements = {
   days: document.querySelector("#days"),
   limitPerSource: document.querySelector("#limit-per-source"),
   maxItems: document.querySelector("#max-items"),
-  categories: document.querySelector("#categories"),
+  categoriesPicker: document.querySelector("#categories-picker"),
+  categoriesSelectAll: document.querySelector("#categories-select-all"),
+  categoriesSelectDefault: document.querySelector("#categories-select-default"),
   keyword: document.querySelector("#keyword"),
   includeTaiwan: document.querySelector("#include-taiwan"),
   sourcesPicker: document.querySelector("#sources-picker"),
@@ -109,6 +118,8 @@ function bindEvents() {
   elements.sourcesSelectAll.addEventListener("click", () => setAllSources(true));
   elements.sourcesClearAll.addEventListener("click", () => setAllSources(false));
   elements.sourcesSelectDefault.addEventListener("click", () => setDefaultSources());
+  elements.categoriesSelectAll.addEventListener("click", () => setAllCategories(true));
+  elements.categoriesSelectDefault.addEventListener("click", () => setDefaultCategories());
   elements.apiBase.addEventListener("change", loadSources);
   bindResizer(elements.resizeTopics, "topics");
   bindResizer(elements.resizeContext, "context");
@@ -118,22 +129,27 @@ function bindEvents() {
     elements.days,
     elements.limitPerSource,
     elements.maxItems,
-    elements.categories,
     elements.keyword,
     elements.includeTaiwan,
   ].forEach((element) => {
     element.addEventListener("change", persistControls);
   });
+
+  elements.categoriesPicker.addEventListener("change", handleCategoryPickerChange);
+  elements.includeTaiwan.addEventListener("change", handleIncludeTaiwanChange);
 }
 
 function hydrateControls() {
   const filters = state.filters;
-  if (!filters) return;
+  renderCategoriesPicker();
+  if (!filters) {
+    setDefaultCategories();
+    return;
+  }
   elements.apiBase.value = filters.apiBase || elements.apiBase.value;
   elements.days.value = filters.days || elements.days.value;
   elements.limitPerSource.value = filters.limitPerSource || elements.limitPerSource.value;
   elements.maxItems.value = filters.maxItems || elements.maxItems.value;
-  elements.categories.value = filters.categories || "";
   elements.keyword.value = filters.keyword || "";
   elements.includeTaiwan.checked = Boolean(filters.includeTaiwan);
   state.selections = filters.selections || {};
@@ -147,6 +163,14 @@ function hydrateControls() {
   elements.articleSort.value = state.sort.articles;
   elements.hideWeakTopics.checked = state.sort.hideWeakTopics;
   elements.selectedOnly.checked = state.sort.selectedOnly;
+
+  if (Array.isArray(filters.selectedCategories) && filters.selectedCategories.length > 0) {
+    setCheckedCategories(filters.selectedCategories);
+  } else if (typeof filters.categories === "string" && filters.categories.trim()) {
+    setCheckedCategories(filters.categories.split(",").map((part) => part.trim()).filter(Boolean));
+  } else {
+    setDefaultCategories();
+  }
 }
 
 async function loadSources() {
@@ -246,6 +270,65 @@ function setDefaultSources() {
   persistControls();
 }
 
+function renderCategoriesPicker() {
+  elements.categoriesPicker.innerHTML = AVAILABLE_CATEGORIES.map(
+    (category) => `
+      <label class="category-pill">
+        <input type="checkbox" class="category-checkbox" value="${escapeHtml(category.value)}" />
+        <span>${escapeHtml(category.label)}</span>
+      </label>`,
+  ).join("");
+}
+
+function getSelectedCategories() {
+  return Array.from(elements.categoriesPicker.querySelectorAll(".category-checkbox:checked")).map(
+    (input) => input.value,
+  );
+}
+
+function setCheckedCategories(values) {
+  const selected = new Set(values);
+  elements.categoriesPicker.querySelectorAll(".category-checkbox").forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
+  syncIncludeTaiwanWithCategories();
+}
+
+function setAllCategories(checked) {
+  elements.categoriesPicker.querySelectorAll(".category-checkbox").forEach((input) => {
+    input.checked = checked;
+  });
+  syncIncludeTaiwanWithCategories();
+  persistControls();
+}
+
+function setDefaultCategories() {
+  setCheckedCategories(["crypto", "us_stocks_macro", "ai"]);
+  persistControls();
+}
+
+function handleCategoryPickerChange() {
+  syncIncludeTaiwanWithCategories();
+  persistControls();
+}
+
+function syncIncludeTaiwanWithCategories() {
+  const selected = getSelectedCategories();
+  const hasTaiwan = selected.includes("taiwan_stocks");
+  elements.includeTaiwan.checked = hasTaiwan;
+}
+
+function handleIncludeTaiwanChange() {
+  const selected = new Set(getSelectedCategories());
+  if (elements.includeTaiwan.checked) {
+    selected.add("taiwan_stocks");
+  } else {
+    selected.delete("taiwan_stocks");
+  }
+  setCheckedCategories([...selected]);
+  persistControls();
+}
+
 function groupBy(items, keyFn) {
   const out = {};
   for (const item of items) {
@@ -271,7 +354,8 @@ function persistControls() {
     days: elements.days.value,
     limitPerSource: elements.limitPerSource.value,
     maxItems: elements.maxItems.value,
-    categories: elements.categories.value,
+    categories: getSelectedCategories().join(","),
+    selectedCategories: getSelectedCategories(),
     keyword: elements.keyword.value,
     includeTaiwan: elements.includeTaiwan.checked,
     selectedSources: getSelectedSourceNames(),
@@ -377,7 +461,7 @@ async function handleLoadWeekly() {
       includeTaiwan: String(elements.includeTaiwan.checked),
     });
 
-    const categories = elements.categories.value.trim();
+    const categories = getSelectedCategories().join(",");
     const keyword = elements.keyword.value.trim();
     const selectedSources = getSelectedSourceNames();
     if (categories) params.set("categories", categories);
@@ -997,7 +1081,7 @@ function buildExportPayload() {
       limitPerSource: Number(elements.limitPerSource.value),
       maxItemsPerCategory: Number(elements.maxItems.value),
       includeTaiwan: elements.includeTaiwan.checked,
-      categories: elements.categories.value.trim() || null,
+      categories: getSelectedCategories().join(",") || null,
       sources: getSelectedSourceNames(),
       keyword: elements.keyword.value.trim() || null,
     },

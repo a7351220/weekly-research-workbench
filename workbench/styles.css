@@ -125,6 +125,11 @@ a {
   min-width: 0;
 }
 
+.control-group-categories {
+  grid-column: span 2;
+  min-width: 0;
+}
+
 .checkbox-group {
   justify-content: flex-end;
 }
@@ -185,6 +190,21 @@ a {
   padding: 8px;
   max-height: 168px;
   overflow: auto;
+}
+
+.categories-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
 }
 
 .source-group + .source-group {

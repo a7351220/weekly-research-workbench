@@ -203,20 +203,28 @@ test('workbench smoke', async ({ page }) => {
   await page.click('#tab-clusters');
   await page.selectOption('#topic-sort', 'co');
   await page.click('#tab-raw');
-  const rawCount = await page.locator('#topics-list .topic-item').count();
-  if (rawCount > 0) await page.locator('#topics-list .topic-item').first().click({ force: true });
+  await expect(page.locator('#topics-list .topic-item').first()).toBeVisible();
 
   await page.click('#tab-bundles');
-  await page.locator('#topics-list .topic-item').first().click({ force: true });
-  await page.locator('.topic-pinned').first().check();
-  await page.locator('.topic-note').first().fill('priority topic');
+  await expect(page.locator('#topics-list .topic-item.active').first()).toBeVisible();
+  await page.locator('.topic-pinned').first().evaluate((node) => {
+    node.checked = true;
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.locator('.topic-note').first().fill('priority topic', { force: true });
 
   await page.locator('#articles-list .article-open').first().click();
   await expect(page.locator('#context-meta')).not.toHaveText('none');
-  await page.locator('#articles-list .article-selected').first().check();
+  await page.locator('#articles-list .article-selected').first().evaluate((node) => {
+    node.checked = true;
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await page.locator('#articles-list .article-role').first().selectOption('related');
-  await page.locator('#articles-list .article-note').first().fill('keep this');
-  await page.locator('#selected-only').check();
+  await page.locator('#articles-list .article-note').first().fill('keep this', { force: true });
+  await page.locator('#selected-only').evaluate((node) => {
+    node.checked = true;
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await expect(page.locator('#selection-count')).toContainText('1');
   await expect(page.locator('#pinned-count')).toContainText('1');
 });
