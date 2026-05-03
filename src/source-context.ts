@@ -210,15 +210,19 @@ function extractMetaContent(
   attrValue: string,
 ): string | null {
   const pattern = new RegExp(
-    `<meta[^>]+${attrName}=["']${escapeRegex(attrValue)}["'][^>]+content=["']([^"']+)["'][^>]*>`,
+    `<meta[^>]+${attrName}=(["'])${escapeRegex(attrValue)}\\1[^>]+content=(["'])([\\s\\S]*?)\\2[^>]*>`,
     "i",
   );
   const reversePattern = new RegExp(
-    `<meta[^>]+content=["']([^"']+)["'][^>]+${attrName}=["']${escapeRegex(attrValue)}["'][^>]*>`,
+    `<meta[^>]+content=(["'])([\\s\\S]*?)\\1[^>]+${attrName}=(["'])${escapeRegex(attrValue)}\\3[^>]*>`,
     "i",
   );
   const match = html.match(pattern) ?? html.match(reversePattern);
-  return match ? normalizeWhitespace(decodeHtmlEntities(match[1])) : null;
+  if (!match) {
+    return null;
+  }
+  const content = match.length >= 4 ? (match[3] ?? match[2]) : match[1];
+  return content ? normalizeWhitespace(decodeHtmlEntities(content)) : null;
 }
 
 function extractTagText(html: string, tagName: string): string | null {
@@ -266,5 +270,7 @@ function escapeRegex(input: string): string {
 }
 
 function isBylineParagraph(paragraph: string): boolean {
-  return /^(written by|by\s+[A-Z][a-z]+|disclaimer|image source|read more)/i.test(paragraph);
+  return /^(written by|by\s+[A-Z][a-z]+|disclaimer|image source|read more|some subscribers prefer to save their log-in information|to activate this function|this will save the password)/i.test(
+    paragraph,
+  );
 }
