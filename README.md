@@ -224,37 +224,520 @@ Optional category:
 
 Taiwan feeds are only fetched when `includeTaiwan=true`.
 
-## Scoring and clustering
+## How the algorithm decides
 
-The Worker adds research-oriented metadata on top of raw RSS items.
+This project does not use a single black-box model to decide what matters.
 
-### Item-level signals
+It uses a layered rule-based pipeline:
 
-- `sourceType`
-- `sourcePriority`
-- `reportScore`
-- `reportSignals`
-- `editorialScore`
-- `editorialSignals`
+`article -> score -> tags/entities -> cluster -> bundle -> final category ordering`
+
+If you want to tune the behavior, the main file is:
+
+- [`src/editorial.ts`](./src/editorial.ts)
+
+The final Taiwan category display mixing / de-duplication logic is in:
+
+- [`src/index.ts`](./src/index.ts)
+
+### 1. Article-level scoring
+
+Each article starts as a normalized feed item, then gets enriched by `enrichWithEditorialSignals()` in `src/editorial.ts`.
+
+The core scoring entry point is:
+
+- `scoreBaseEditorial(item)`
+
+This function looks at:
+
+- source type
+- source priority
+- title and description text
+- entity matches
+- event matches
+- low-signal / noisy patterns
+- freshness
+- category-specific boosts
+
+It outputs:
+
+- `score`
+- `signals`
 - `topicTags`
 - `topicEntities`
-- `crossSourceCount`
-- `socialProof`
+
+#### Entity matching
+
+The algorithm first looks for important entities such as:
+
+- Big Tech names: Google / Alphabet, Microsoft, Amazon, Meta, Apple
+- chip names: Nvidia, Intel, AMD
+- crypto entities: Bitcoin, Ethereum, Strategy, Coinbase, stablecoins
+- macro entities: Fed, CPI, jobs, GDP
+
+These are defined in:
+
+- `ENTITY_PATTERNS`
+
+Each match adds:
+
+- one or more `topicTags`
+- one `topicEntity`
+- an editorial score bonus
+
+Example:
+
+- `Google + earnings` will usually add:
+  - `big_tech`
+  - `earnings_watch`
+  - high editorial weight
+
+#### Event matching
+
+The algorithm then looks for event types such as:
+
+- earnings
+- record highs
+- index moves
+- capex / data center / compute infrastructure
+- regulation
+- fund flows
+- price moves
+- launch / rollout
+
+These are defined in:
+
+- `EVENT_PATTERNS`
+
+Each event can:
+
+- add score
+- add tags
+- add an `event:*` signal
+
+#### Penalties
+
+The system also subtracts score for low-value or noisy items, defined in:
+
+- `LOW_SIGNAL_PATTERNS`
+
+Typical penalties include:
+
+- how-to / tutorial content
+- brand marketing fluff
+- generic daily recaps
+- admin notices
+- clickbait investing headlines
+- generic active-stock lists
+
+For Taiwan specifically, ETF administrative notices are also penalized.  
+This is how the system avoids over-promoting things like:
+
+- ETF listing notices
+- financing / securities lending setup notices
+- educational ETF pages
+
+#### Category-specific boosts
+
+After generic scoring, the article gets category-specific boosts:
+
+- `us_stocks_macro`
+  - earnings / index move / macro data are boosted
+- `ai`
+  - AI infra / capex / compute themes are boosted
+- `crypto`
+  - policy / flows / Strategy / ETF structure themes are boosted
+- `taiwan_stocks`
+  - Taiwan supply-chain, semis, ETF flows, policy, data center, market-story tags are added and weighted separately
+
+Taiwan-specific logic is important enough that it has its own source families and content checks.
+
+Key Taiwan helpers include:
+
+- `isTaiwanSupplyChainStory()`
+- `isTaiwanAdministrativeFundNotice()`
+- `isTaiwanEnglishMarketStory()`
+- `isTaiwanBroadMarketStory()`
+
+### 2. Derived metadata
+
+Once the base score exists, the algorithm derives several fields that later drive clustering:
+
+- `topicTags`
+- `topicEntities`
 - `eventType`
 - `majorEntity`
 - `marketTheme`
 - `clusterKey`
+
+These are important because the later grouping logic does **not** compare articles purely by text similarity.
+
+Instead, it compares structured fields like:
+
+- shared entities
+- shared tags
+- shared market theme
+- shared event type
+
+#### What these fields mean
+
+- `topicTags`
+  - semantic tags like `earnings`, `fund_flows`, `ai_infra`, `taiwan_ai_supply_chain`
+- `topicEntities`
+  - extracted entities like `alphabet`, `strategy`, `nvidia`
+- `eventType`
+  - the main event class, such as `earnings`, `fund_flows`, `policy`, `macro_data`
+- `majorEntity`
+  - the main company / asset / macro anchor
+- `marketTheme`
+  - the broad market frame, such as `official`, `flows`, `market`
+- `clusterKey`
+  - the deterministic key used to group similar articles into one topic cluster
+
+If you want different article grouping behavior, `clusterKey` generation is one of the most important places to inspect.
+
+### 3. Source quality, corroboration, and market reaction
+
+After article enrichment, three additional scores are calculated:
+
 - `sourceQualityScore`
 - `corroborationScore`
 - `marketReactionScore`
 
-### Response-level groupings
+#### `sourceQualityScore`
 
-- `topicClusters`
-- `narrativeBundles`
+Main function:
 
-The goal is not to show the most articles.  
-The goal is to surface the most report-worthy stories.
+- `scoreSourceQuality(...)`
+
+This score is based on:
+
+- `sourceType`
+  - official / research / media
+- source priority
+- whether the article contains meaningful numbers
+- whether the article contains quotes
+- whether the article is tied to high-value entities
+
+Taiwan has extra source-weighting families:
+
+- `TAIWAN_LOCAL_HARD_SOURCE_SET`
+- `TAIWAN_LOCAL_STORY_SOURCE_SET`
+- `TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET`
+- `TAIWAN_EN_MARKET_CORE_SOURCE_SET`
+- `TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET`
+- `TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET`
+
+This is how the system distinguishes:
+
+- official Taiwan disclosure
+- local Taiwan market reporting
+- Taiwan industry / supply-chain context
+- English Taiwan market coverage
+
+#### `corroborationScore`
+
+This score tries to answer:
+
+`How well is this article corroborated by other evidence?`
+
+It uses:
+
+- overlap with matched editorial topics
+- overlap in tags and entities
+- source diversity
+- source context around the same theme
+
+This is why a single strong official item can still be useful, but multiple cross-source items usually rank better.
+
+#### `marketReactionScore`
+
+This score tries to answer:
+
+`Did the market actually react to this?`
+
+It looks for things like:
+
+- explicit percentage moves
+- shares rising / falling
+- record highs
+- flows / inflows / outflows
+- price-action language in the title
+
+This score helps separate:
+
+- important but static background pieces
+- from things the market is actively repricing
+
+### 4. `raw`, `clusters`, and `bundles`
+
+The workbench has three layers because the algorithm groups information in stages.
+
+#### `raw`
+
+`raw` is the fallback view of individual story candidates.
+
+Use it when:
+
+- clustering did not find enough matching articles
+- the story is too new
+- the story is niche
+
+#### `clusters`
+
+Main function:
+
+- `buildTopicClusters(items)`
+
+A `cluster` is a small event-level group:
+
+- same event
+- same entity
+- same market theme
+- or same structural cluster key
+
+The algorithm groups articles by:
+
+- `clusterKey`
+
+Then aggregates:
+
+- item count
+- source count
+- total editorial score
+- average editorial score
+- top titles
+- tags
+- entities
+
+Current filtering logic is roughly:
+
+- if the cluster key ends with `|general`
+  - require `averageEditorialScore >= 85`
+  - and `itemCount >= 2`
+- otherwise
+  - require either:
+    - `totalEditorialScore >= 90`
+    - or `itemCount >= 2`
+
+That means some clusters can still have only one article if:
+
+- the article scored high enough
+- and the system thinks it is worth surfacing as a candidate
+
+This is especially true for Taiwan because the thresholds were intentionally loosened so the Taiwan view would not collapse into an empty screen.
+
+#### `bundles`
+
+Main function:
+
+- `buildNarrativeBundles(clusters)`
+
+A `bundle` is a story package suitable for a weekly report.
+
+It is **not** just a larger cluster.  
+It is a group of clusters that can be told as one story.
+
+Examples:
+
+- Big Tech earnings and repricing
+- crypto flows and regulation
+- Taiwan AI supply chain and data-center beneficiaries
+- Taiwan ETF and fund-flow rotation
+
+### 5. How bundles are formed
+
+Bundle construction happens in two ways:
+
+#### A. Explicit Taiwan bundle families
+
+Taiwan is special-cased, because otherwise ETF notices, policy disclosures, market summaries, and AI supply-chain stories can easily contaminate each other.
+
+The current explicit Taiwan families are:
+
+- `台股 AI 供應鏈與資料中心受惠包`
+- `台股 ETF 與資金輪動包`
+- `台股市場與總經觀察包`
+- `台股政策與公告主線包`
+
+These are created using explicit predicates over `topicTags`, such as:
+
+- `taiwan_ai_supply_chain`
+- `taiwan_data_center`
+- `taiwan_semis`
+- `taiwan_etf_flows`
+- `taiwan_market_story`
+- `taiwan_policy`
+- `taiwan_admin_notice`
+
+This is why Taiwan bundles are more hand-shaped than generic US / AI / crypto bundles.
+
+#### B. Generic relation-based bundling
+
+For everything else, the algorithm compares clusters using:
+
+- `scoreClusterRelation(a, b)`
+- `canJoinBundle(anchor, candidate)`
+
+##### `scoreClusterRelation(...)`
+
+This adds relation points for:
+
+- shared entities
+- shared tags
+- same market theme
+- same event type
+- same category
+- overlapping title tokens
+
+It also has explicit bridge bonuses for cross-market narratives:
+
+- Big Tech + AI bridge
+- crypto + macro bridge
+- crypto + AI bridge
+- Taiwan story bridge
+
+##### `canJoinBundle(...)`
+
+This is the guardrail function.
+
+It stops clusters from being merged just because they happen to have high scores.
+
+Important examples:
+
+- Taiwan AI clusters do not freely merge with Taiwan ETF clusters
+- Taiwan market / macro clusters do not freely merge with Taiwan AI clusters unless they share enough real overlap
+- Taiwan policy / admin notices do not freely merge into Taiwan AI
+- non-Taiwan clusters are not allowed to become Taiwan bundles unless they really carry Taiwan tags
+
+If you think the system is mixing the wrong stories together, this is one of the first functions to edit.
+
+### 6. Standalone bundles
+
+Main function:
+
+- `canFormStandaloneBundle(cluster)`
+
+Normally a bundle should contain multiple clusters.
+
+But in Taiwan, some strong clusters are allowed to become standalone bundles if they are strong enough.
+
+Current logic requires:
+
+- category = `taiwan_stocks`
+- not tagged as `taiwan_admin_notice`
+- `totalEditorialScore >= 90`
+- and at least one strong Taiwan tag, such as:
+  - `taiwan_ai_supply_chain`
+  - `taiwan_semis`
+  - `taiwan_etf_flows`
+  - `taiwan_policy`
+  - `taiwan_data_center`
+  - `taiwan_market_story`
+
+This is what allows one strong Taiwan story to still appear as a report candidate.
+
+### 7. Final Taiwan front-page diversification
+
+Even after scoring and bundling, Taiwan stories can still be dominated by:
+
+- one aggressive source
+- one ETF-heavy source family
+- one announcement-heavy family
+
+So there is one more step in:
+
+- `src/index.ts`
+- `diversifyTaiwanItems(items, limit)`
+
+This function spreads the final Taiwan item list across family buckets:
+
+- `ai`
+- `etf`
+- `market`
+- `policy`
+- `semis`
+- `other`
+
+It also uses multi-pass source caps and family caps, so the final visible list is not washed out by one source or one story family.
+
+This is a display-stage diversification step, not the core cluster/bundle logic.
+
+If you feel Taiwan is:
+
+- too repetitive
+- too ETF-heavy
+- too official-notice-heavy
+
+this is one of the main places to adjust.
+
+### 8. What to edit if you want different behavior
+
+#### If you want to change article importance
+
+Edit:
+
+- `ENTITY_PATTERNS`
+- `EVENT_PATTERNS`
+- `LOW_SIGNAL_PATTERNS`
+- `scoreBaseEditorial()`
+
+#### If you want to change source weighting
+
+Edit:
+
+- `scoreSourceQuality()`
+- Taiwan source sets such as:
+  - `TAIWAN_LOCAL_HARD_SOURCE_SET`
+  - `TAIWAN_LOCAL_STORY_SOURCE_SET`
+  - `TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET`
+  - `TAIWAN_EN_MARKET_CORE_SOURCE_SET`
+  - `TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET`
+  - `TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET`
+
+#### If you want to change article grouping
+
+Edit:
+
+- `deriveEventType()`
+- `deriveMarketTheme()`
+- `buildClusterKey()`
+- `buildTopicClusters()`
+
+#### If you want to change bundle composition
+
+Edit:
+
+- `buildNarrativeBundles()`
+- `scoreClusterRelation()`
+- `canJoinBundle()`
+- `canFormStandaloneBundle()`
+
+#### If you want to change Taiwan front-page diversity
+
+Edit:
+
+- `diversifyTaiwanItems()` in `src/index.ts`
+
+### 9. The practical goal
+
+The algorithm is not trying to show you the most articles.
+
+It is trying to turn:
+
+- fixed sources
+- mixed article quality
+- uneven category density
+
+into:
+
+- `raw` materials
+- event-level `clusters`
+- report-ready `bundles`
+
+so the workbench becomes:
+
+`source collection -> story compression -> human editorial selection`
 
 ## Private enrichment
 
