@@ -156,20 +156,22 @@ a {
 
 .controls-quick {
   display: grid;
-  grid-template-columns: minmax(220px, 2.2fr) minmax(96px, 0.8fr) minmax(320px, 2fr) auto;
+  grid-template-columns: minmax(96px, 0.7fr) minmax(280px, 1.4fr) minmax(360px, 2.2fr);
   gap: 10px;
   align-items: start;
+  padding: 12px;
 }
 
 .controls-advanced {
   border: 1px solid var(--border);
   background: var(--panel-2);
-  padding: 8px;
+  padding: 8px 12px 12px;
+  margin: 0 12px 12px;
 }
 
 .controls-advanced-grid {
   display: grid;
-  grid-template-columns: minmax(96px, 0.8fr) minmax(120px, 1fr) minmax(220px, 1.6fr);
+  grid-template-columns: minmax(220px, 1.8fr) minmax(120px, 0.8fr) minmax(140px, 0.9fr);
   gap: 10px;
   align-items: start;
   margin-top: 8px;
@@ -245,9 +247,14 @@ a {
 }
 
 .actions-quick {
-  align-self: end;
-  justify-content: flex-end;
+  padding: 0 12px 12px;
+  justify-content: flex-start;
   flex-wrap: wrap;
+}
+
+.actions-advanced {
+  align-self: end;
+  justify-content: flex-start;
 }
 
 .small {
@@ -272,7 +279,7 @@ a {
   border: 1px solid var(--border);
   background: var(--panel-2);
   padding: 8px;
-  max-height: 120px;
+  max-height: 260px;
   overflow: auto;
 }
 
@@ -673,15 +680,6 @@ button.secondary {
 
   .controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .actions {
-    grid-column: span 2;
-    flex-wrap: wrap;
-  }
-
-  .control-group-wide {
-    grid-column: span 2;
   }
 
   .evidence-grid {
