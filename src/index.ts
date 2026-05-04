@@ -161,10 +161,11 @@ async function handleWeekly(url: URL, env: Env): Promise<Response> {
   }
 
   for (const category of CATEGORY_ORDER) {
-    categories[category] = sortItemsForWeekly(categories[category]).slice(
-      0,
-      params.maxItemsPerCategory,
-    );
+    const sorted = sortItemsForWeekly(categories[category]);
+    categories[category] =
+      category === "taiwan_stocks"
+        ? diversifyTaiwanItems(sorted, params.maxItemsPerCategory)
+        : sorted.slice(0, params.maxItemsPerCategory);
   }
   const topicClusters = buildTopicClusters(Object.values(categories).flat());
   const narrativeBundles = buildNarrativeBundles(topicClusters);
@@ -255,4 +256,63 @@ function mapSourceForResponse(source: FeedSource) {
 
 function hasEditorialSecrets(env: Env): boolean {
   return Boolean(env.BLOCKBEATS_API_KEY || env.OPENNEWS_TOKEN || env.TWITTER_TOKEN);
+}
+
+function diversifyTaiwanItems(items: FeedItem[], limit: number): FeedItem[] {
+  const picked: FeedItem[] = [];
+  const sourceCounts = new Map<string, number>();
+  const familyCounts = new Map<string, number>();
+  const seen = new Set<string>();
+
+  const familyOf = (item: FeedItem): string => {
+    const tags = item.topicTags ?? [];
+    if (tags.includes("taiwan_ai_supply_chain") || tags.includes("taiwan_data_center")) {
+      return "ai";
+    }
+    if (tags.includes("taiwan_etf_flows")) {
+      return "etf";
+    }
+    if (tags.includes("taiwan_market_story")) {
+      return "market";
+    }
+    if (tags.includes("taiwan_policy") || tags.includes("taiwan_admin_notice")) {
+      return "policy";
+    }
+    if (tags.includes("taiwan_semis")) {
+      return "semis";
+    }
+    return "other";
+  };
+
+  const pushIfAllowed = (
+    item: FeedItem,
+    sourceCap: number,
+    familyCap: number,
+  ): boolean => {
+    if (picked.length >= limit) return false;
+    if (seen.has(item.id)) return false;
+    const sourceCount = sourceCounts.get(item.source) ?? 0;
+    const family = familyOf(item);
+    const familyCount = familyCounts.get(family) ?? 0;
+    if (sourceCount >= sourceCap || familyCount >= familyCap) {
+      return false;
+    }
+    picked.push(item);
+    seen.add(item.id);
+    sourceCounts.set(item.source, sourceCount + 1);
+    familyCounts.set(family, familyCount + 1);
+    return true;
+  };
+
+  for (const item of items) {
+    pushIfAllowed(item, 2, 4);
+  }
+  for (const item of items) {
+    pushIfAllowed(item, 3, 6);
+  }
+  for (const item of items) {
+    pushIfAllowed(item, 5, limit);
+  }
+
+  return picked.slice(0, limit);
 }
