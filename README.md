@@ -205,6 +205,8 @@ Optional category:
 - DIGITIMES Daily — `https://www.digitimes.com/rss/daily.xml`
 - TechNews Finance — `https://finance.technews.tw/feed/`
 - Business Weekly Investment — `https://www.businessweekly.com.tw/Event/feedsec.aspx?feedid=10&channelid=15`
+- Focus Taiwan Business (HTML feed parser) — `https://focustaiwan.tw/business`
+- Taipei Times Business (HTML feed parser) — `https://www.taipeitimes.com/News/biz`
 - MOPS Material Information 201001 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201001.xml`
 - MOPS Material Information 201002 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201002.xml`
 - MOPS Material Information 201003 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201003.xml`

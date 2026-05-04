@@ -24,7 +24,9 @@ export interface FeedSource {
     | "cnyes_tw_stock_html"
     | "udn_tw_stock_html"
     | "udn_jsonld_list"
-    | "tpex_press_json";
+    | "tpex_press_json"
+    | "focus_taiwan_business_html"
+    | "taipei_times_biz_html";
   articleHosts?: string[];
 }
 

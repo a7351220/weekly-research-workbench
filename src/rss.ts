@@ -151,6 +151,10 @@ async function fetchHtmlFeed(
           ? extractUdnTwStockEntries(html).slice(0, params.limitPerSource)
         : source.parser === "udn_jsonld_list"
           ? extractUdnJsonLdEntries(html).slice(0, params.limitPerSource)
+        : source.parser === "focus_taiwan_business_html"
+          ? extractFocusTaiwanBusinessEntries(html).slice(0, params.limitPerSource)
+        : source.parser === "taipei_times_biz_html"
+          ? extractTaipeiTimesBizEntries(html).slice(0, params.limitPerSource)
         : [];
 
     const items: FeedItem[] = [];
@@ -642,6 +646,70 @@ function extractUdnJsonLdEntries(html: string): Array<{
   return entries;
 }
 
+function extractFocusTaiwanBusinessEntries(html: string): Array<{
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  description?: string | null;
+}> {
+  const entries: Array<{
+    title: string;
+    url: string;
+    publishedAt: string | null;
+    description?: string | null;
+  }> = [];
+  const seen = new Set<string>();
+  const regex =
+    /<a href="(\/business\/\d+)"[^>]*>[\s\S]*?<h2>([\s\S]*?)<\/h2>[\s\S]*?<div class="date">(.*?)<\/div>/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    const url = resolveUrl(match[1], "https://focustaiwan.tw");
+    if (seen.has(url)) continue;
+    seen.add(url);
+    entries.push({
+      title: stripHtml(match[2]),
+      url,
+      publishedAt: parseUsDateTime(match[3]),
+      description: null,
+    });
+  }
+
+  return entries;
+}
+
+function extractTaipeiTimesBizEntries(html: string): Array<{
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  description?: string | null;
+}> {
+  const entries: Array<{
+    title: string;
+    url: string;
+    publishedAt: string | null;
+    description?: string | null;
+  }> = [];
+  const seen = new Set<string>();
+  const regex =
+    /<a href="(https:\/\/www\.taipeitimes\.com\/News\/biz\/archives\/[^"]+)"[^>]*data-desc="[^"]*">[\s\S]*?<h1 class="bf2?">(.*?)<\/h1>[\s\S]*?<div class="date_list hidden">(.*?)<\/div>[\s\S]*?<p(?: class="fsp")?>(.*?)<\/p>/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    const url = match[1].trim();
+    if (seen.has(url)) continue;
+    seen.add(url);
+    entries.push({
+      title: stripHtml(match[2]),
+      url,
+      publishedAt: parseIsoDateText(match[3]),
+      description: stripHtml(match[4]),
+    });
+  }
+
+  return entries;
+}
+
 function extractTpexPressEntries(payload: {
   stat?: string;
   tables?: Array<{ data?: unknown[] }>;
@@ -716,4 +784,44 @@ function parseRocDateText(input: string | null): string | null {
   const month = Number(match[2]);
   const day = Number(match[3]);
   return new Date(Date.UTC(year, month - 1, day)).toISOString();
+}
+
+function parseUsDateTime(input: string | null): string | null {
+  if (!input) return null;
+  const text = input.replace(/\s+/g, " ").trim();
+  const match = text.match(
+    /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+(AM|PM)/i,
+  );
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  let hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const meridiem = match[6].toUpperCase();
+  if (meridiem === "PM" && hour !== 12) hour += 12;
+  if (meridiem === "AM" && hour === 12) hour = 0;
+  return new Date(Date.UTC(year, month - 1, day, hour, minute)).toISOString();
+}
+
+function parseIsoDateText(input: string | null): string | null {
+  if (!input) return null;
+  const text = input.replace(/\s+/g, " ").trim();
+  const match = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return new Date(Date.UTC(year, month - 1, day)).toISOString();
+}
+
+function stripHtml(input: string): string {
+  return cleanDescription(
+    input
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
 }
