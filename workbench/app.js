@@ -355,7 +355,11 @@ function setAllSources(checked) {
 }
 
 function setDefaultSources() {
-  const defaults = new Set(state.availableSources.filter((s) => s.enabled).map((s) => s.name));
+  const selectedCategories = new Set(getSelectedCategories());
+  const scoped = state.availableSources.filter((source) => selectedCategories.has(source.category));
+  const defaults = new Set(
+    (scoped.length > 0 ? scoped : state.availableSources).map((s) => s.name),
+  );
   elements.sourcesPicker.querySelectorAll('.source-checkbox').forEach((input) => {
     input.checked = defaults.has(input.value);
   });
@@ -402,11 +406,11 @@ function handleCategoryPickerChange() {
   const selected = getSelectedCategories();
   const taiwanOnly = selected.length === 1 && selected[0] === "taiwan_stocks";
   if (taiwanOnly) {
-    if (Number(elements.limitPerSource.value) < 8) {
-      elements.limitPerSource.value = "8";
+    if (Number(elements.limitPerSource.value) < 10) {
+      elements.limitPerSource.value = "10";
     }
-    if (Number(elements.maxItems.value) < 40) {
-      elements.maxItems.value = "40";
+    if (Number(elements.maxItems.value) < 80) {
+      elements.maxItems.value = "80";
     }
   }
   persistControls();
