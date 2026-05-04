@@ -427,6 +427,9 @@ export function scoreBaseEditorial(item: FeedItem): {
     if (/(資料中心|data center|機房|雲端|CSP)/i.test(text)) {
       topicTags.add("taiwan_data_center");
     }
+    if (isEnglishMarketStory || /(台股|加權指數|TAIEX|台灣經濟|GDP|成長率|評等|外資|匯率|債券|降息|升息)/i.test(text)) {
+      topicTags.add("taiwan_market_story");
+    }
     if (isSupplyChainStory) {
       topicTags.add("taiwan_ai_supply_chain");
     }
@@ -1225,8 +1228,10 @@ function deriveBundleKind(
     );
     const etfClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_etf_flows"));
     const policyClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_policy"));
+    const marketClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_market_story"));
     const aiScore = aiClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
     const etfScore = etfClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
+    const marketScore = marketClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
 
     if (
       aiClusters.length >= 2 ||
@@ -1255,6 +1260,15 @@ function deriveBundleKind(
         title: "台股政策與公告主線包",
         summary: "把證交所、櫃買中心、重大訊息與制度更新放在一起，才能看出台股本週的正式揭露主線。",
         angle: "先講制度或公告，再補上可能影響的公司與產業。",
+      };
+    }
+
+    if (marketClusters.length >= 1 && marketScore >= 90) {
+      return {
+        key: "taiwan-market-macro",
+        title: "台股市場與總經觀察包",
+        summary: "把台股大盤、總經數據、評等與市場情緒放在一起，才能看出台股這週的大方向到底在反映什麼。",
+        angle: "先講台股與總經的結果，再拆背後是景氣、評等、匯率還是外部市場預期在帶動。",
       };
     }
   }
@@ -1372,6 +1386,9 @@ function canJoinBundle(anchor: TopicCluster, candidate: TopicCluster): boolean {
       anchor.topicTags.includes("taiwan_policy") || anchor.topicTags.includes("taiwan_admin_notice");
     const candidateIsPolicy =
       candidate.topicTags.includes("taiwan_policy") || candidate.topicTags.includes("taiwan_admin_notice");
+    const anchorIsMarket = anchor.topicTags.includes("taiwan_market_story");
+    const candidateIsMarket = candidate.topicTags.includes("taiwan_market_story");
+    const sharedEntities = intersectCount(anchor.topicEntities, candidate.topicEntities);
 
     if ((anchorIsAi && candidateIsEtf) || (anchorIsEtf && candidateIsAi)) {
       return false;
@@ -1380,6 +1397,24 @@ function canJoinBundle(anchor: TopicCluster, candidate: TopicCluster): boolean {
     if (
       (anchorIsAi && candidateIsPolicy && !candidateIsAi) ||
       (candidateIsAi && anchorIsPolicy && !anchorIsAi)
+    ) {
+      return false;
+    }
+
+    if ((anchorIsMarket && candidateIsEtf) || (candidateIsMarket && anchorIsEtf)) {
+      return false;
+    }
+
+    if (
+      ((anchorIsMarket && candidateIsPolicy) || (candidateIsMarket && anchorIsPolicy)) &&
+      sharedEntities === 0
+    ) {
+      return false;
+    }
+
+    if (
+      ((anchorIsMarket && candidateIsAi) || (candidateIsMarket && anchorIsAi)) &&
+      sharedEntities === 0
     ) {
       return false;
     }
@@ -1497,12 +1532,27 @@ function isTaiwanStoryBridge(a: TopicCluster, b: TopicCluster): boolean {
     a.topicTags.includes("taiwan_policy") || a.topicTags.includes("taiwan_admin_notice");
   const bIsPolicy =
     b.topicTags.includes("taiwan_policy") || b.topicTags.includes("taiwan_admin_notice");
+  const aIsMarket = a.topicTags.includes("taiwan_market_story");
+  const bIsMarket = b.topicTags.includes("taiwan_market_story");
+  const sharedEntities = intersectCount(a.topicEntities, b.topicEntities);
 
   if ((aIsAi && bIsEtf) || (aIsEtf && bIsAi)) {
     return false;
   }
 
   if ((aIsAi && bIsPolicy && !bIsAi) || (bIsAi && aIsPolicy && !aIsAi)) {
+    return false;
+  }
+
+  if ((aIsMarket && bIsEtf) || (aIsEtf && bIsMarket)) {
+    return false;
+  }
+
+  if (((aIsMarket && bIsPolicy) || (bIsMarket && aIsPolicy)) && sharedEntities === 0) {
+    return false;
+  }
+
+  if (((aIsMarket && bIsAi) || (bIsMarket && aIsAi)) && sharedEntities === 0) {
     return false;
   }
 
@@ -1526,7 +1576,7 @@ function canFormStandaloneBundle(cluster: TopicCluster): boolean {
   return (
     cluster.totalEditorialScore >= 90 &&
     cluster.topicTags.some((tag) =>
-      ["taiwan_ai_supply_chain", "taiwan_semis", "taiwan_etf_flows", "taiwan_policy", "taiwan_data_center"].includes(tag),
+      ["taiwan_ai_supply_chain", "taiwan_semis", "taiwan_etf_flows", "taiwan_policy", "taiwan_data_center", "taiwan_market_story"].includes(tag),
     )
   );
 }
