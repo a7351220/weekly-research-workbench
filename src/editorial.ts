@@ -427,7 +427,7 @@ export function scoreBaseEditorial(item: FeedItem): {
     if (/(資料中心|data center|機房|雲端|CSP)/i.test(text)) {
       topicTags.add("taiwan_data_center");
     }
-    if (isEnglishMarketStory || /(台股|加權指數|TAIEX|台灣經濟|GDP|成長率|評等|外資|匯率|債券|降息|升息)/i.test(text)) {
+    if (isEnglishMarketStory || /(台股|加權指數|TAIEX|台灣股市|台灣經濟|GDP|成長率|評等|外資|匯率)/i.test(text)) {
       topicTags.add("taiwan_market_story");
     }
     if (isSupplyChainStory) {
