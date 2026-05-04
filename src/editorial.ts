@@ -178,6 +178,12 @@ const TAIWAN_SUPPLY_CHAIN_PATTERN =
 const TAIWAN_AI_CONTEXT_PATTERN =
   /(\bai\b|人工智慧|資料中心|data center|csp|gpu|asic|伺服器|server|算力|nvidia|amd|intel|rubin|blackwell|h100|h200|b200|cloud|雲端|電源|散熱|載板|cpo|矽光子|先進封裝|2奈米)/i;
 
+const TAIWAN_EN_COMPANY_PATTERN =
+  /(tsmc|taiwan semiconductor|hon hai|foxconn|mediatek|umc|ase|siliconware|lite-on|quanta|wistron|wiwynn|inventec|compal|pegatron|delta|advantech|asus|acer|msi|gigabyte|realtek|novatek|nanya|yageo|jpc|cpc)/i;
+
+const TAIWAN_EN_MARKET_PATTERN =
+  /(taiex|taiwan shares?|stock market|stocks? exchange|earnings|revenue|profit|guidance|exports?|orders?|gdp|growth|inflation|cpi|rating|outlook|currency|trading|trade|investment|tariff|bond|etf|yield|semiconductor|chip|chips|ai|server|data center|supply chain|capex|cloud)/i;
+
 function isTaiwanSupplyChainStory(
   text: string,
   topicEntities: string[],
@@ -205,6 +211,25 @@ function isTaiwanSupplyChainStory(
 
 function isTaiwanAdministrativeFundNotice(text: string): boolean {
   return /(掛牌上市|融資融券|募集發行|專區上線|了解ETF配息來源|收益平準金制度)/i.test(text);
+}
+
+function isTaiwanEnglishMarketStory(text: string): boolean {
+  if (TAIWAN_EN_COMPANY_PATTERN.test(text)) {
+    return true;
+  }
+
+  const hasTaiwanAnchor = /\b(taiwan|taiwanese|taipei|taiex)\b/i.test(text);
+  if (hasTaiwanAnchor && TAIWAN_EN_MARKET_PATTERN.test(text)) {
+    return true;
+  }
+
+  if (/(nvidia|amd|intel|csp|hyperscaler|server|data center|supply chain|semiconductor)/i.test(text) &&
+      /(partner|partners|supplier|suppliers|manufactur|assembly|packaging)/i.test(text) &&
+      /(taiwan|taiwanese|tsmc|hon hai|foxconn|quanta|wistron|wiwynn|lite-on|advantech|delta)/i.test(text)) {
+    return true;
+  }
+
+  return false;
 }
 
 export function scoreBaseEditorial(item: FeedItem): {
@@ -385,6 +410,7 @@ export function scoreBaseEditorial(item: FeedItem): {
       Array.from(topicTags),
     );
     const isAdministrativeFundNotice = isTaiwanAdministrativeFundNotice(text);
+    const isEnglishMarketStory = isTaiwanEnglishMarketStory(text);
 
     if (/(台積電|聯發科|世芯|創意|日月光|京元電|2奈米|先進封裝|半導體)/i.test(text)) {
       topicTags.add("taiwan_semis");
@@ -423,6 +449,10 @@ export function scoreBaseEditorial(item: FeedItem): {
           ? "taiwan_en_market_supply_chain_fit"
           : "taiwan_en_market_core_fit",
       );
+      if (!isEnglishMarketStory) {
+        score -= 22;
+        signals.add("penalty:taiwan_en_market_not_relevant");
+      }
     } else if (TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 8 : 4;
       signals.add(
@@ -430,6 +460,10 @@ export function scoreBaseEditorial(item: FeedItem): {
           ? "taiwan_en_context_supply_chain_fit"
           : "taiwan_en_market_context_fit",
       );
+      if (!isEnglishMarketStory) {
+        score -= 26;
+        signals.add("penalty:taiwan_en_context_not_relevant");
+      }
     } else if (TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 14 : 1;
       signals.add(
@@ -437,6 +471,10 @@ export function scoreBaseEditorial(item: FeedItem): {
           ? "taiwan_en_supply_chain_fit"
           : "taiwan_en_supply_chain_background",
       );
+      if (!isEnglishMarketStory) {
+        score -= 18;
+        signals.add("penalty:taiwan_en_supply_chain_not_relevant");
+      }
     } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 12 : 3;
       signals.add(
@@ -684,6 +722,9 @@ function scoreSourceQuality(
       topicEntities,
       topicTags,
     );
+    const isEnglishMarketStory = isTaiwanEnglishMarketStory(
+      `${item.title} ${item.description}`,
+    );
 
     if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
       score += 10;
@@ -691,10 +732,19 @@ function scoreSourceQuality(
       score += 4;
     } else if (TAIWAN_EN_MARKET_CORE_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 8 : 6;
+      if (!isEnglishMarketStory) {
+        score -= 10;
+      }
     } else if (TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 6 : 2;
+      if (!isEnglishMarketStory) {
+        score -= 12;
+      }
     } else if (TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 8 : -4;
+      if (!isEnglishMarketStory) {
+        score -= 10;
+      }
     } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 6 : -6;
     }
