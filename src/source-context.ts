@@ -75,7 +75,8 @@ async function fetchArticleContext(
   maxParagraphs: number,
 ): Promise<SourceContextArticle | SourceContextFailure> {
   const normalizedUrl = normalizeUrl(articleUrl);
-  const sourceName = matchSourceName(normalizedUrl);
+  const source = matchSource(normalizedUrl);
+  const sourceName = source?.name ?? null;
 
   if (!sourceName) {
     return {
@@ -99,6 +100,10 @@ async function fetchArticleContext(
     });
 
     if (!response.ok) {
+      const fallback = await tryFeedFallback(source, normalizedUrl);
+      if (fallback) {
+        return fallback;
+      }
       return {
         url: articleUrl,
         normalizedUrl,
@@ -117,6 +122,66 @@ async function fetchArticleContext(
       reason: error instanceof Error ? error.message : "Unknown article fetch error",
       status: null,
     };
+  }
+}
+
+async function tryFeedFallback(
+  source: { name: string; url: string } | null,
+  normalizedUrl: string,
+): Promise<SourceContextArticle | null> {
+  if (!source) {
+    return null;
+  }
+
+  if (!source.name.startsWith("Yahoo Taiwan")) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(source.url, {
+      headers: {
+        "user-agent": "weekly-rss-middleware/1.0",
+        accept: "application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+      },
+      cf: {
+        cacheTtl: 300,
+        cacheEverything: false,
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const xml = await response.text();
+    const item = findRssItemByLink(xml, normalizedUrl);
+    if (!item) {
+      return null;
+    }
+
+    const title = normalizeWhitespace(stripHtml(decodeHtmlEntities(item.title)));
+    const description = cleanDescription(
+      stripHtml(decodeHtmlEntities(item.description)),
+      1200,
+    );
+    const publishedAt = parseDate(item.pubDate).publishedAt;
+    const numbersMentioned = extractNumbers(description).slice(0, 12);
+
+    return {
+      url: normalizedUrl,
+      normalizedUrl,
+      source: source.name,
+      title: cleanDescription(title, 300),
+      publishedAt,
+      description: cleanDescription(description, 500),
+      leadText: cleanDescription(description || title, 1000),
+      articleExcerpt: cleanDescription(description, 4000),
+      keyParagraphs: description ? [description] : [],
+      quotedLines: [],
+      numbersMentioned,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -177,7 +242,7 @@ function extractArticleFromHtml(
   };
 }
 
-function matchSourceName(articleUrl: string): string | null {
+function matchSource(articleUrl: string): { name: string; url: string } | null {
   let hostname: string;
   try {
     hostname = new URL(articleUrl).hostname.replace(/^www\./, "");
@@ -196,7 +261,7 @@ function matchSourceName(articleUrl: string): string | null {
         hostname.endsWith(`.${sourceHost}`) ||
         sourceHost.endsWith(`.${hostname}`)
       )) {
-        return source.name;
+        return { name: source.name, url: source.url };
       }
     } catch {
       continue;
@@ -204,6 +269,40 @@ function matchSourceName(articleUrl: string): string | null {
   }
 
   return null;
+}
+
+function findRssItemByLink(
+  xml: string,
+  normalizedUrl: string,
+): { title: string; description: string; pubDate: string } | null {
+  const items = xml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
+  for (const item of items) {
+    const link = extractXmlTag(item, "link");
+    if (normalizeUrl(link || "") !== normalizedUrl) {
+      continue;
+    }
+    return {
+      title: extractCdataOrTag(item, "title") || "",
+      description: extractCdataOrTag(item, "description") || "",
+      pubDate: extractXmlTag(item, "pubDate") || "",
+    };
+  }
+  return null;
+}
+
+function extractXmlTag(xml: string, tagName: string): string | null {
+  const match = xml.match(new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "i"));
+  return match ? normalizeWhitespace(decodeHtmlEntities(match[1])) : null;
+}
+
+function extractCdataOrTag(xml: string, tagName: string): string | null {
+  const cdata = xml.match(
+    new RegExp(`<${tagName}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tagName}>`, "i"),
+  );
+  if (cdata) {
+    return normalizeWhitespace(decodeHtmlEntities(cdata[1]));
+  }
+  return extractXmlTag(xml, tagName);
 }
 
 function extractMetaContent(
