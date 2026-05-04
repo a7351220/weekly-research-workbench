@@ -399,6 +399,16 @@ function setDefaultCategories() {
 }
 
 function handleCategoryPickerChange() {
+  const selected = getSelectedCategories();
+  const taiwanOnly = selected.length === 1 && selected[0] === "taiwan_stocks";
+  if (taiwanOnly) {
+    if (Number(elements.limitPerSource.value) < 8) {
+      elements.limitPerSource.value = "8";
+    }
+    if (Number(elements.maxItems.value) < 40) {
+      elements.maxItems.value = "40";
+    }
+  }
   persistControls();
 }
 

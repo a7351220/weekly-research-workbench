@@ -305,13 +305,13 @@ function diversifyTaiwanItems(items: FeedItem[], limit: number): FeedItem[] {
   };
 
   for (const item of items) {
-    pushIfAllowed(item, 2, 4);
+    pushIfAllowed(item, 3, 5);
   }
   for (const item of items) {
-    pushIfAllowed(item, 3, 6);
+    pushIfAllowed(item, 5, 8);
   }
   for (const item of items) {
-    pushIfAllowed(item, 5, limit);
+    pushIfAllowed(item, 8, limit);
   }
 
   return picked.slice(0, limit);
