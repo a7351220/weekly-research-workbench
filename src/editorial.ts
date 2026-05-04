@@ -1032,6 +1032,82 @@ export function buildNarrativeBundles(clusters: TopicCluster[]): NarrativeBundle
     .sort((a, b) => b.totalEditorialScore - a.totalEditorialScore);
   const visited = new Set<string>();
   const bundles: NarrativeBundle[] = [];
+  const taiwanClusters = filtered.filter((cluster) => cluster.category === "taiwan_stocks");
+
+  const explicitTaiwanGroups: Array<{
+    key: string;
+    title: string;
+    summary: string;
+    angle: string;
+    predicate: (cluster: TopicCluster) => boolean;
+  }> = [
+    {
+      key: "taiwan-ai-supply-chain",
+      title: "台股 AI 供應鏈與資料中心受惠包",
+      summary: "把台廠 AI 供應鏈、半導體、資料中心與受惠鏈條放在一起，才能看出台股本週真正被市場重估的是哪些公司。",
+      angle: "先講受惠鏈條，再講哪些公司被點名，最後補上背後的算力、資料中心與資本支出主線。",
+      predicate: (cluster) =>
+        cluster.topicTags.includes("taiwan_ai_supply_chain") ||
+        cluster.topicTags.includes("taiwan_data_center") ||
+        (cluster.topicTags.includes("taiwan_semis") && cluster.topicTags.includes("ai_infra")),
+    },
+    {
+      key: "taiwan-etf-flows",
+      title: "台股 ETF 與資金輪動包",
+      summary: "把 ETF、配息、高股息與資金輪動題放在一起，才能看出台股資金本週實際往哪裡集中。",
+      angle: "先講資金往哪流，再講哪些產品和族群最受惠。",
+      predicate: (cluster) => cluster.topicTags.includes("taiwan_etf_flows"),
+    },
+    {
+      key: "taiwan-market-macro",
+      title: "台股市場與總經觀察包",
+      summary: "把台股大盤、總經數據、評等與市場情緒放在一起，才能看出台股這週的大方向到底在反映什麼。",
+      angle: "先講台股與總經的結果，再拆背後是景氣、評等、匯率還是外部市場預期在帶動。",
+      predicate: (cluster) =>
+        cluster.topicTags.includes("taiwan_market_story") &&
+        !cluster.topicTags.includes("taiwan_etf_flows") &&
+        !cluster.topicTags.includes("taiwan_ai_supply_chain") &&
+        !cluster.topicTags.includes("taiwan_data_center"),
+    },
+    {
+      key: "taiwan-policy-disclosure",
+      title: "台股政策與公告主線包",
+      summary: "把證交所、櫃買中心、重大訊息與制度更新放在一起，才能看出台股本週的正式揭露主線。",
+      angle: "先講制度或公告，再補上可能影響的公司與產業。",
+      predicate: (cluster) =>
+        (cluster.topicTags.includes("taiwan_policy") || cluster.topicTags.includes("taiwan_admin_notice")) &&
+        !cluster.topicTags.includes("taiwan_etf_flows"),
+    },
+  ];
+
+  for (const group of explicitTaiwanGroups) {
+    const groupClusters = taiwanClusters
+      .filter((cluster) => !visited.has(cluster.clusterKey))
+      .filter(group.predicate)
+      .sort((a, b) => b.totalEditorialScore - a.totalEditorialScore)
+      .slice(0, 4);
+
+    if (groupClusters.length === 0) {
+      continue;
+    }
+
+    if (groupClusters.length < 2 && !canFormStandaloneBundle(groupClusters[0])) {
+      continue;
+    }
+
+    for (const cluster of groupClusters) {
+      visited.add(cluster.clusterKey);
+    }
+
+    const bundle = buildNarrativeBundle(groupClusters);
+    bundles.push({
+      ...bundle,
+      bundleKey: group.key,
+      title: group.title,
+      summary: group.summary,
+      angle: group.angle,
+    });
+  }
 
   for (const cluster of filtered) {
     if (visited.has(cluster.clusterKey)) {
