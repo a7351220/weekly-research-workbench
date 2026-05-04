@@ -155,6 +155,10 @@ async function fetchHtmlFeed(
           ? extractFocusTaiwanBusinessEntries(html).slice(0, params.limitPerSource)
         : source.parser === "taipei_times_biz_html"
           ? extractTaipeiTimesBizEntries(html).slice(0, params.limitPerSource)
+        : source.parser === "trendforce_semiconductors_html"
+          ? extractTrendForceSemiconductorsEntries(html).slice(0, params.limitPerSource)
+        : source.parser === "rti_business_html"
+          ? extractRtiBusinessEntries(html).slice(0, params.limitPerSource)
         : [];
 
     const items: FeedItem[] = [];
@@ -704,6 +708,73 @@ function extractTaipeiTimesBizEntries(html: string): Array<{
       url,
       publishedAt: parseIsoDateText(match[3]),
       description: stripHtml(match[4]),
+    });
+  }
+
+  return entries;
+}
+
+function extractTrendForceSemiconductorsEntries(html: string): Array<{
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  description?: string | null;
+}> {
+  const entries: Array<{
+    title: string;
+    url: string;
+    publishedAt: string | null;
+    description?: string | null;
+  }> = [];
+  const seen = new Set<string>();
+  const regex =
+    /<div class="insight-tag"><i class="fa fa fa-calendar"><\/i>\s*([\d-]+)\s*<h2 class="text-ellipsis-2"><a class="title-link" href="([^"]+)"><strong>(.*?)<\/strong><\/a>[\s\S]*?<div class="insight-list-item-summary">[\s\S]*?<p>(.*?)<\/p>/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    const url = match[2].trim();
+    if (seen.has(url)) continue;
+    seen.add(url);
+    entries.push({
+      title: stripHtml(match[3]),
+      url,
+      publishedAt: parseIsoDateText(match[1]),
+      description: stripHtml(match[4]),
+    });
+  }
+
+  return entries;
+}
+
+function extractRtiBusinessEntries(html: string): Array<{
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  description?: string | null;
+}> {
+  const entries: Array<{
+    title: string;
+    url: string;
+    publishedAt: string | null;
+    description?: string | null;
+  }> = [];
+  const seen = new Set<string>();
+  const regex =
+    /<div class="item">\s*<a href="(news\?uid=3&amp;pid=\d+|news\?uid=3&pid=\d+)"[\s\S]*?<div class="title">([\s\S]*?)<\/div>[\s\S]*?<div class="text ellipsis-3">([\s\S]*?)<\/div>[\s\S]*?<span class="time">(.*?)<\/span>/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    const url = resolveUrl(
+      match[1].replace(/&amp;/g, "&"),
+      "https://en.rti.org.tw/",
+    );
+    if (seen.has(url)) continue;
+    seen.add(url);
+    entries.push({
+      title: stripHtml(match[2]),
+      url,
+      publishedAt: null,
+      description: stripHtml(match[3]),
     });
   }
 

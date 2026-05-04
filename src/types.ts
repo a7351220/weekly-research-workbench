@@ -26,7 +26,9 @@ export interface FeedSource {
     | "udn_jsonld_list"
     | "tpex_press_json"
     | "focus_taiwan_business_html"
-    | "taipei_times_biz_html";
+    | "taipei_times_biz_html"
+    | "trendforce_semiconductors_html"
+    | "rti_business_html";
   articleHosts?: string[];
 }
 

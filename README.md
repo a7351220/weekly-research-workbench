@@ -207,6 +207,9 @@ Optional category:
 - Business Weekly Investment — `https://www.businessweekly.com.tw/Event/feedsec.aspx?feedid=10&channelid=15`
 - Focus Taiwan Business (HTML feed parser) — `https://focustaiwan.tw/business`
 - Taipei Times Business (HTML feed parser) — `https://www.taipeitimes.com/News/biz`
+- TrendForce Semiconductors (HTML feed parser) — `https://www.trendforce.com/news/category/semiconductors/`
+- TrendForce News — `https://www.trendforce.com/news/feed/`
+- RTI Business (HTML feed parser) — `https://en.rti.org.tw/news/category/business`
 - MOPS Material Information 201001 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201001.xml`
 - MOPS Material Information 201002 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201002.xml`
 - MOPS Material Information 201003 — `https://mopsov.twse.com.tw/nas/rss/mopsrss201003.xml`
