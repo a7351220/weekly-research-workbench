@@ -98,10 +98,6 @@ const elements = {
   articleSort: document.querySelector("#article-sort"),
   hideWeakTopics: document.querySelector("#hide-weak-topics"),
   selectedOnly: document.querySelector("#selected-only"),
-  officialOnly: document.querySelector("#official-only"),
-  evidenceStrongOnly: document.querySelector("#evidence-strong-only"),
-  mergeTopics: document.querySelector("#merge-topics"),
-  clearMergeSelection: document.querySelector("#clear-merge-selection"),
 };
 
 init();
@@ -146,18 +142,6 @@ function bindEvents() {
     persistControls();
     renderArticles();
   });
-  elements.officialOnly.addEventListener("change", () => {
-    state.sort.officialOnly = elements.officialOnly.checked;
-    persistControls();
-    renderArticles();
-  });
-  elements.evidenceStrongOnly.addEventListener("change", () => {
-    state.sort.evidenceStrongOnly = elements.evidenceStrongOnly.checked;
-    persistControls();
-    renderArticles();
-  });
-  elements.mergeTopics.addEventListener("click", handleMergeTopics);
-  elements.clearMergeSelection.addEventListener("click", handleClearMergeSelection);
   elements.toggleApiBase.addEventListener("click", toggleApiBaseVisibility);
   elements.sourcesSelectAll.addEventListener("click", () => setAllSources(true));
   elements.sourcesClearAll.addEventListener("click", () => setAllSources(false));
@@ -225,15 +209,13 @@ function hydrateControls() {
     articles: filters.articleSort || "editorial",
     hideWeakTopics: Boolean(filters.hideWeakTopics),
     selectedOnly: Boolean(filters.selectedOnly),
-    officialOnly: Boolean(filters.officialOnly),
-    evidenceStrongOnly: Boolean(filters.evidenceStrongOnly),
+    officialOnly: false,
+    evidenceStrongOnly: false,
   };
   elements.topicSort.value = state.sort.topics;
   elements.articleSort.value = state.sort.articles;
   elements.hideWeakTopics.checked = state.sort.hideWeakTopics;
   elements.selectedOnly.checked = state.sort.selectedOnly;
-  elements.officialOnly.checked = state.sort.officialOnly;
-  elements.evidenceStrongOnly.checked = state.sort.evidenceStrongOnly;
 
   if (Array.isArray(filters.selectedCategories) && filters.selectedCategories.length > 0) {
     setCheckedCategories(filters.selectedCategories);
@@ -803,7 +785,6 @@ function renderTopics() {
     const tags = fragment.querySelector(".topic-item-tags");
     const meta = fragment.querySelector(".topic-item-meta");
     const pinned = fragment.querySelector(".topic-pinned");
-    const merge = fragment.querySelector(".topic-merge");
     const split = fragment.querySelector(".topic-split");
     const note = fragment.querySelector(".topic-note");
 
@@ -817,7 +798,6 @@ function renderTopics() {
     const topicState = state.selections[`topic:${topic.key}`] || {};
     pinned.checked = Boolean(topicState.pinned);
     note.value = topicState.note || "";
-    merge.checked = Boolean(state.selections[`merge:${topic.key}`]?.selected);
     split.hidden = topic.type !== "merged";
 
     if (topic.key === state.selectedTopicKey) {
@@ -830,16 +810,6 @@ function renderTopics() {
       renderTopics();
       renderArticles();
       renderContext();
-    });
-
-    merge.addEventListener("change", () => {
-      state.selections[`merge:${topic.key}`] = {
-        ...(state.selections[`merge:${topic.key}`] || {}),
-        selected: merge.checked,
-        topicKey: topic.key,
-        topicTitle: topic.title,
-      };
-      persistControls();
     });
 
     pinned.addEventListener("change", () => {
