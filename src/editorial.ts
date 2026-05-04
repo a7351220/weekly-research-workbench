@@ -615,7 +615,7 @@ export function enrichWithEditorialSignals(
     }
   }
 
-  let editorialScore = base.score;
+  let signalWeightedBaseScore = base.score;
   const editorialSignals = [...base.signals];
   let crossSourceCount = 0;
   let socialProof = 0;
@@ -627,7 +627,7 @@ export function enrichWithEditorialSignals(
       28,
       matchedTopic.sourceCount * 8 + Math.min(12, Math.round(Math.log10(Math.max(matchedTopic.totalEngagement, 1)) * 4)),
     );
-    editorialScore += signalBoost;
+    signalWeightedBaseScore += signalBoost;
     editorialSignals.push("signal_topic_match");
     editorialSignals.push(`cross_source:${matchedTopic.sourceCount}`);
     crossSourceCount = matchedTopic.sourceCount;
@@ -649,6 +649,8 @@ export function enrichWithEditorialSignals(
   const majorEntity = deriveMajorEntity(topicEntities);
   const marketTheme = deriveMarketTheme(item.category, topicTags, majorEntity, eventType);
   const clusterKey = buildClusterKey(item.category, eventType, majorEntity, marketTheme, topicTags);
+  const evidenceScore = scoreEvidence(item);
+  const substantiationScore = scoreSubstantiation(item, topicTags, topicEntities);
   const sourceQualityScore = scoreSourceQuality(item, base.topicTags, base.topicEntities);
   const corroborationScore = scoreCorroboration(
     matchedTopic,
@@ -658,13 +660,35 @@ export function enrichWithEditorialSignals(
     topicEntities,
   );
   const marketReactionScore = scoreMarketReaction(item, topicTags, editorialSignals, majorEntity);
+  const storyValueScore = scoreStoryValue(
+    item,
+    signalWeightedBaseScore,
+    topicTags,
+    topicEntities,
+    eventType,
+    marketTheme,
+  );
+  const penaltyScore = scorePenalty(item, editorialSignals);
+  const editorialScore = scoreEditorialComposite({
+    sourceQualityScore,
+    evidenceScore,
+    substantiationScore,
+    corroborationScore,
+    marketReactionScore,
+    storyValueScore,
+    penaltyScore,
+  });
 
   return {
     ...item,
+    evidenceScore,
+    substantiationScore,
+    storyValueScore,
+    penaltyScore,
     sourceQualityScore,
     corroborationScore,
     marketReactionScore,
-    editorialScore: Math.max(0, editorialScore),
+    editorialScore,
     editorialSignals,
     topicTags,
     topicEntities,
@@ -675,6 +699,161 @@ export function enrichWithEditorialSignals(
     marketTheme,
     clusterKey,
   };
+}
+
+function scoreEvidence(item: FeedItem): number {
+  const rawText = `${item.title} ${item.rawDescription || item.description}`;
+  const cleanText = `${item.title} ${item.description}`;
+  const numberCount = rawText.match(/\$?\d[\d,.]*%?/g)?.length ?? 0;
+  const quoteCount =
+    (rawText.match(/[“”"'`]/gu)?.length ?? 0) > 0 ||
+    /\b(said|says|according to|told)\b/i.test(rawText)
+      ? 1
+      : 0;
+  const paragraphLikeScore = cleanText.length >= 320 ? 15 : cleanText.length >= 180 ? 10 : cleanText.length >= 90 ? 5 : 0;
+
+  let score = 0;
+  if (numberCount >= 6) {
+    score += 30;
+  } else if (numberCount >= 3) {
+    score += 20;
+  } else if (numberCount >= 1) {
+    score += 10;
+  }
+
+  score += quoteCount > 0 ? 15 : 0;
+  score += paragraphLikeScore;
+
+  if (item.sourceType === "official") {
+    score += 20;
+  } else if (item.sourceType === "research") {
+    score += 10;
+  }
+
+  if (/\b(earnings|results|guidance|forecast|revenue|profit|sales)\b/i.test(rawText)) {
+    score += 10;
+  }
+
+  return Math.min(100, Math.max(0, score));
+}
+
+function scoreSubstantiation(
+  item: FeedItem,
+  topicTags: string[],
+  topicEntities: string[],
+): number {
+  const titleTokens = new Set(tokenize(item.title));
+  const bodyTokens = new Set(tokenize(item.rawDescription || item.description));
+  let overlap = 0;
+  for (const token of titleTokens) {
+    if (bodyTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+
+  const titleNumbers = item.title.match(/\$?\d[\d,.]*%?/g)?.length ?? 0;
+  const bodyNumbers = (item.rawDescription || item.description).match(/\$?\d[\d,.]*%?/g)?.length ?? 0;
+  const hasEntitySupport = topicEntities.some((entity) =>
+    new RegExp(`\\b${entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(item.rawDescription || item.description),
+  );
+
+  let score = 20;
+  if (overlap >= 4) {
+    score += 25;
+  } else if (overlap >= 2) {
+    score += 15;
+  } else if (overlap >= 1) {
+    score += 8;
+  }
+
+  if (titleNumbers > 0 && bodyNumbers > 0) {
+    score += 20;
+  } else if (bodyNumbers > 0) {
+    score += 10;
+  }
+
+  if (hasEntitySupport) {
+    score += 10;
+  }
+
+  if (topicTags.some((tag) => ["earnings", "policy", "fund_flows", "macro_data"].includes(tag))) {
+    score += 10;
+  }
+
+  if ((item.rawDescription || item.description).length < 80) {
+    score -= 10;
+  }
+
+  if (/\b(how to|guide|tutorial|tips)\b/i.test(item.title)) {
+    score -= 15;
+  }
+
+  return Math.min(100, Math.max(0, score));
+}
+
+function scoreStoryValue(
+  item: FeedItem,
+  baseScore: number,
+  topicTags: string[],
+  topicEntities: string[],
+  eventType: string | null,
+  marketTheme: string | null,
+): number {
+  let score = Math.min(70, Math.max(10, Math.round(baseScore * 0.45)));
+
+  if (eventType) {
+    score += 10;
+  }
+  if (marketTheme) {
+    score += 8;
+  }
+  if (topicEntities.length > 0) {
+    score += Math.min(10, topicEntities.length * 4);
+  }
+  if (topicTags.some((tag) => ["earnings", "fund_flows", "ai_infra", "macro_data", "taiwan_ai_supply_chain", "taiwan_market_story"].includes(tag))) {
+    score += 12;
+  }
+  if (item.category === "taiwan_stocks" && topicTags.some((tag) => tag.startsWith("taiwan_"))) {
+    score += 8;
+  }
+  if (item.ageHours !== null && item.ageHours <= 72) {
+    score += 5;
+  }
+
+  return Math.min(100, Math.max(0, score));
+}
+
+function scorePenalty(item: FeedItem, editorialSignals: string[]): number {
+  const penaltyCount = editorialSignals.filter((signal) => signal.startsWith("penalty:")).length;
+  let penalty = penaltyCount * 7;
+  const text = `${item.title} ${item.description}`;
+  if (item.category === "taiwan_stocks" && isTaiwanAdministrativeFundNotice(text)) {
+    penalty += 8;
+  }
+  if (/\b(roundup|daily recap|week in review)\b/i.test(text)) {
+    penalty += 10;
+  }
+  return Math.min(40, Math.max(0, penalty));
+}
+
+function scoreEditorialComposite(input: {
+  sourceQualityScore: number;
+  evidenceScore: number;
+  substantiationScore: number;
+  corroborationScore: number;
+  marketReactionScore: number;
+  storyValueScore: number;
+  penaltyScore: number;
+}): number {
+  const composite =
+    0.22 * input.sourceQualityScore +
+    0.2 * input.evidenceScore +
+    0.15 * input.substantiationScore +
+    0.18 * input.corroborationScore +
+    0.15 * input.marketReactionScore +
+    0.1 * input.storyValueScore;
+
+  return Math.max(0, Math.round(composite * 1.5 - input.penaltyScore));
 }
 
 function scoreSourceQuality(

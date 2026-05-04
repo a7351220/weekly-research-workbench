@@ -116,6 +116,14 @@ components:
           type: array
           items:
             type: string
+        evidenceScore:
+          type: integer
+        substantiationScore:
+          type: integer
+        storyValueScore:
+          type: integer
+        penaltyScore:
+          type: integer
         sourceQualityScore:
           type: integer
         corroborationScore:

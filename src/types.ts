@@ -64,6 +64,10 @@ export interface FeedItem {
   dateQuality: DateQuality;
   reportScore: number;
   reportSignals: string[];
+  evidenceScore: number;
+  substantiationScore: number;
+  storyValueScore: number;
+  penaltyScore: number;
   sourceQualityScore: number;
   corroborationScore: number;
   marketReactionScore: number;

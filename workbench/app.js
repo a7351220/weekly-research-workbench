@@ -1107,8 +1107,11 @@ function buildSelectionRecord(article, topic, role, note = "") {
     topicKey: topic?.key || null,
     topicTitle: topic?.title || null,
     sourceQualityScore: article.sourceQualityScore ?? 0,
+    evidenceScore: article.evidenceScore ?? 0,
+    substantiationScore: article.substantiationScore ?? 0,
     corroborationScore: article.corroborationScore ?? 0,
     marketReactionScore: article.marketReactionScore ?? 0,
+    storyValueScore: article.storyValueScore ?? 0,
     sourceType: article.sourceType || "media",
     officialBacked: isOfficialBacked(article),
     evidenceStrength: evidence.label,
@@ -1130,8 +1133,11 @@ function summarizeScores(items) {
 
   return {
     sourceQualityScore: avg("sourceQualityScore"),
+    evidenceScore: avg("evidenceScore"),
+    substantiationScore: avg("substantiationScore"),
     corroborationScore: avg("corroborationScore"),
     marketReactionScore: avg("marketReactionScore"),
+    storyValueScore: avg("storyValueScore"),
     editorialScore: avg("editorialScore"),
   };
 }
@@ -1411,6 +1417,7 @@ function buildExportPayload() {
       keyNumbers: topic.numbers.slice(0, 12),
       keyQuotes: topic.keyQuotes.slice(0, 4),
       factCheckItems: topic.factCheckItems,
+      averageScores: topic.averageScores,
       coreLinks: topic.core.map((article) => article.url),
       relatedLinks: topic.related.map((article) => article.url),
     })),
@@ -1456,6 +1463,7 @@ function buildResearchTopics(entries, pinnedTopics) {
       strongEvidenceCount: allArticles.filter((article) =>
         summarizeContextEvidence(article.sourceContext).label === "high"
       ).length,
+      averageScores: summarizeScores(allArticles),
       storyAngle: buildStoryAngle(topic.topicTitle, core, related),
       core,
       related,
@@ -1557,6 +1565,7 @@ function toMarkdown(payload) {
     lines.push(`- sourceTypes: ${topic.sourceTypes.join(", ")}`);
     lines.push(`- officialBackedCount: ${topic.officialBackedCount}`);
     lines.push(`- strongEvidenceCount: ${topic.strongEvidenceCount}`);
+    lines.push(`- avgScores: source=${topic.averageScores.sourceQualityScore}, evidence=${topic.averageScores.evidenceScore}, substantiation=${topic.averageScores.substantiationScore}, corroboration=${topic.averageScores.corroborationScore}, reaction=${topic.averageScores.marketReactionScore}, story=${topic.averageScores.storyValueScore}, total=${topic.averageScores.editorialScore}`);
     lines.push(`- storyAngle: ${topic.storyAngle}`);
     if (topic.links.length) {
       lines.push(`- links:`);
@@ -1588,7 +1597,7 @@ function toMarkdown(payload) {
       lines.push(`- source: ${article.source}`);
       lines.push(`- publishedAt: ${article.publishedAt || "no date"}`);
       lines.push(`- url: ${article.url}`);
-      lines.push(`- sq/co/mr: ${article.sourceQualityScore}/${article.corroborationScore}/${article.marketReactionScore}`);
+      lines.push(`- src/ev/sub/co/mr/story: ${article.sourceQualityScore}/${article.evidenceScore}/${article.substantiationScore}/${article.corroborationScore}/${article.marketReactionScore}/${article.storyValueScore}`);
       lines.push(`- sourceType: ${article.sourceType || "media"}`);
       lines.push(`- officialBacked: ${Boolean(article.officialBacked)}`);
       lines.push(`- evidenceStrength: ${article.evidenceStrength || "low"}`);
@@ -1614,7 +1623,7 @@ function toMarkdown(payload) {
       lines.push(`- source: ${article.source}`);
       lines.push(`- publishedAt: ${article.publishedAt || "no date"}`);
       lines.push(`- url: ${article.url}`);
-      lines.push(`- sq/co/mr: ${article.sourceQualityScore}/${article.corroborationScore}/${article.marketReactionScore}`);
+      lines.push(`- src/ev/sub/co/mr/story: ${article.sourceQualityScore}/${article.evidenceScore}/${article.substantiationScore}/${article.corroborationScore}/${article.marketReactionScore}/${article.storyValueScore}`);
       lines.push(`- sourceType: ${article.sourceType || "media"}`);
       lines.push(`- officialBacked: ${Boolean(article.officialBacked)}`);
       lines.push(`- evidenceStrength: ${article.evidenceStrength || "low"}`);
