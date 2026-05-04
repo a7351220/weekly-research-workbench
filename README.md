@@ -739,6 +739,309 @@ so the workbench becomes:
 
 `source collection -> story compression -> human editorial selection`
 
+## `scoring_v2` design draft
+
+The current system already has:
+
+- `editorialScore`
+- `sourceQualityScore`
+- `corroborationScore`
+- `marketReactionScore`
+
+But for future tuning, a better design is to split article quality into more explicit dimensions instead of relying too heavily on one aggregated score.
+
+This section is a proposed next-step design, not yet the live production formula.
+
+### Why split the score
+
+Right now, several different ideas are partially mixed together:
+
+- source trust
+- evidence density
+- how well claims are supported
+- cross-source confirmation
+- market reaction
+- story usefulness
+
+If these are separated, the system becomes:
+
+- easier to debug
+- easier to tune
+- easier to learn from editor behavior later
+
+### Proposed score families
+
+#### 1. `SourceScore`
+
+Question:
+
+`How trustworthy is the source itself?`
+
+Inputs:
+
+- source type
+- source priority
+- whether the source is primary / official
+- whether the source has historically acted like:
+  - hard disclosure
+  - local market reporting
+  - industry context
+  - English Taiwan market context
+
+Suggested structure:
+
+```text
+SourceScore = sourceTypeScore + primarySourceBonus + sourceHistoryBonus
+```
+
+Typical interpretation:
+
+- official / primary disclosure -> very high
+- research / strong local market reporting -> high
+- industry context / supply-chain media -> medium-high
+- generic aggregator -> low
+
+#### 2. `EvidenceScore`
+
+Question:
+
+`How much directly usable evidence is present in the article itself?`
+
+Inputs:
+
+- `numberCount`
+- `quoteCount`
+- `paragraphCount`
+- whether there is a primary document or primary statement behind the article
+
+Suggested structure:
+
+```text
+EvidenceScore = numbersScore + quotesScore + paragraphScore + primaryDocBonus
+```
+
+This score should answer:
+
+- does the article actually contain usable numbers?
+- does it contain quotable material?
+- does it contain enough body content to support a report?
+
+#### 3. `SubstantiationScore`
+
+Question:
+
+`Do the claims in the title / lead actually have support in the body?`
+
+This is different from `EvidenceScore`.
+
+- `EvidenceScore` asks: is there evidence?
+- `SubstantiationScore` asks: does the evidence actually support the main claim?
+
+Suggested signals:
+
+- title claim appears again in key paragraphs
+- title numbers are supported by body numbers
+- the article is not just making a broad conclusion without support
+- quotes are relevant to the main claim, not filler
+
+First version can be coarse:
+
+- `high`
+- `medium`
+- `low`
+
+#### 4. `CorroborationScore`
+
+Question:
+
+`How well is this story confirmed across multiple sources?`
+
+Inputs:
+
+- article count
+- source count
+- source-type diversity
+- whether there is an official source
+- whether there is cross-market reinforcement
+
+Suggested interpretation:
+
+- one article, one source -> low
+- multiple articles, multiple sources -> medium
+- official + media + industry confirmation -> high
+
+#### 5. `MarketReactionScore`
+
+Question:
+
+`Did the market actually react to this information?`
+
+Inputs:
+
+- explicit percentage moves
+- price-action language
+- record highs / large drops
+- ETF inflows / outflows
+- index or sector reaction
+
+This score should stay separate from pure quality because:
+
+- a high-quality article can have low immediate reaction
+- a low-quality article can still describe a very strong market move
+
+#### 6. `StoryValueScore`
+
+Question:
+
+`How useful is this item for building a reportable story?`
+
+Inputs:
+
+- can it form or support a cluster?
+- can it join a bundle?
+- is it a core event or only background?
+- does it connect to a larger market narrative?
+
+Suggested interpretation:
+
+- raw-only material -> low
+- singleton cluster -> medium
+- multi-article cluster -> high
+- bundle core -> very high
+
+### Proposed total score
+
+One simple weighted version:
+
+```text
+TotalScore
+= 0.22 * SourceScore
++ 0.20 * EvidenceScore
++ 0.15 * SubstantiationScore
++ 0.18 * CorroborationScore
++ 0.15 * MarketReactionScore
++ 0.10 * StoryValueScore
+- Penalties
+```
+
+This should not be treated as final.  
+It is a clean starting point because it is:
+
+- interpretable
+- easy to compare
+- easy to tune by category
+
+### Penalties should stay separate
+
+Do not hide penalties inside the main positive scores.
+
+Keep a separate penalty layer for:
+
+- how-to / tutorial content
+- brand fluff
+- generic roundups
+- low-information admin notices
+- title-body mismatch
+- dead-link or feed-only fallback articles
+
+This makes debugging easier:
+
+- high evidence but heavy penalty
+- high source quality but weak story value
+
+These should be visible as distinct cases.
+
+### What should be stored now for future learning
+
+To support future ranking models, the system should preserve:
+
+#### Article-level features
+
+- `sourceName`
+- `sourceType`
+- `sourcePriority`
+- `numberCount`
+- `quoteCount`
+- `paragraphCount`
+- `hasPrimarySource`
+- `hasOfficialSource`
+- `isFeedFallback`
+- `topicTags`
+- `topicEntities`
+- `editorialSignals`
+- `sourceQualityScore`
+- `corroborationScore`
+- `marketReactionScore`
+- future: `EvidenceScore`
+- future: `SubstantiationScore`
+
+#### Topic / cluster-level features
+
+- `articleCount`
+- `sourceCount`
+- `sourceTypeDiversity`
+- `officialBackedCount`
+- `strongEvidenceCount`
+- `bundleFamily`
+- `isBundle`
+- `isStandaloneBundle`
+
+#### Editor behavior labels
+
+- `pinned`
+- `selected`
+- `selectedAsCore`
+- `selectedAsRelated`
+- `exported`
+- future: `usedInFinalReport`
+
+These editor actions are especially important because they can later become training labels.
+
+### Future ranking model direction
+
+The best long-term path is probably not a fully black-box model.
+
+A more practical path is:
+
+#### Stage 1
+
+Rule-based scoring with explicit dimensions:
+
+- `SourceScore`
+- `EvidenceScore`
+- `SubstantiationScore`
+- `CorroborationScore`
+- `MarketReactionScore`
+- `StoryValueScore`
+
+#### Stage 2
+
+Learn from editor behavior using ranking models such as:
+
+- `LightGBM ranker`
+- `XGBoost ranker`
+
+Useful supervision signals:
+
+- item A was selected, item B was not
+- item A became `core`, item B stayed `related`
+- item A was pinned and exported, item B was ignored
+
+This is better than pretending there is a single absolute “quality” label.
+
+### Practical implementation order
+
+If this system is upgraded later, the best order is:
+
+1. split the current score into explicit sub-scores
+2. add `SubstantiationScore`
+3. store editor interaction labels
+4. learn ranking preferences from real usage
+
+In practice, this means:
+
+`better explainability first, learned ranking second`
+
 ## Private enrichment
 
 The Worker can optionally enrich RSS topics with private signals inspired by `boba-cli`.
