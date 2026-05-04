@@ -791,7 +791,7 @@ function renderTopics() {
     title.textContent = topic.title;
     summary.textContent = topic.summary || "no summary";
     tags.innerHTML = renderTopicTagBadges(topic.topicTags || [], topic.categories || []);
-    meta.textContent = `${topic.itemCount} articles / ${topic.sourceCount} sources / ${topic.categories.join(", ")} / sq ${topic.scores.sourceQualityScore} / co ${topic.scores.corroborationScore} / mr ${topic.scores.marketReactionScore}`;
+    meta.textContent = `${topic.itemCount} articles / ${topic.sourceCount} sources / ${topic.categories.join(", ")} / src ${topic.scores.sourceQualityScore} / ev ${topic.scores.evidenceScore} / sub ${topic.scores.substantiationScore} / co ${topic.scores.corroborationScore} / mr ${topic.scores.marketReactionScore} / story ${topic.scores.storyValueScore} / total ${topic.scores.editorialScore}`;
     const officialBackedCount = countOfficialBackedArticles(topic);
     const strongEvidenceCount = countStrongEvidenceArticles(topic);
     meta.textContent += ` / off ${officialBackedCount} / strong ${strongEvidenceCount}`;
@@ -1040,7 +1040,7 @@ function renderArticles() {
     const articleContext = state.contexts[article.url];
     const evidence = summarizeContextEvidence(articleContext);
     openButton.textContent = article.title;
-    meta.textContent = `${article.source} / ${article.publishedAt || "no date"} / ed ${article.editorialScore ?? article.reportScore ?? 0} / sq ${article.sourceQualityScore ?? 0} / co ${article.corroborationScore ?? 0} / mr ${article.marketReactionScore ?? 0}`;
+    meta.textContent = `${article.source} / ${article.publishedAt || "no date"} / src ${article.sourceQualityScore ?? 0} / ev ${article.evidenceScore ?? 0} / sub ${article.substantiationScore ?? 0} / co ${article.corroborationScore ?? 0} / mr ${article.marketReactionScore ?? 0} / story ${article.storyValueScore ?? 0} / total ${article.editorialScore ?? article.reportScore ?? 0}`;
     links.innerHTML = `
       ${topic ? topic.title : "topic"} /
       <a href="${article.url}" target="_blank" rel="noreferrer">open source</a>
@@ -1220,13 +1220,14 @@ function renderContext() {
   }
 
   const context = state.contexts[articleUrl];
+  const article = findArticleByUrl(articleUrl);
   if (!context) {
     elements.contextMeta.textContent = "loading";
     elements.contextView.innerHTML = `<div class="context-empty">loading ...</div>`;
     return;
   }
 
-  elements.contextMeta.textContent = context.source || "article";
+  elements.contextMeta.textContent = `${context.source || "article"}${article ? ` / total ${article.editorialScore ?? article.reportScore ?? 0}` : ""}`;
   const evidence = summarizeContextEvidence(context);
   const numbers = context.numbersMentioned.length
     ? `<div class="context-block"><div class="context-title">numbers_mentioned</div><div class="chip-row">${context.numbersMentioned.map((value) => `<span class="chip">${escapeHtml(value)}</span>`).join("")}</div></div>`
@@ -1246,6 +1247,22 @@ function renderContext() {
       <div class="meta-list">${escapeHtml(context.publishedAt || "no date")} / <a href="${context.url}" target="_blank" rel="noreferrer">open article</a></div>
     </div>
     <div class="evidence-grid">
+      <div class="evidence-card">
+        <div class="evidence-card-title">source_score</div>
+        <div class="evidence-card-value">${article?.sourceQualityScore ?? 0}</div>
+      </div>
+      <div class="evidence-card">
+        <div class="evidence-card-title">evidence_score</div>
+        <div class="evidence-card-value">${article?.evidenceScore ?? 0}</div>
+      </div>
+      <div class="evidence-card">
+        <div class="evidence-card-title">substantiation</div>
+        <div class="evidence-card-value">${article?.substantiationScore ?? 0}</div>
+      </div>
+      <div class="evidence-card">
+        <div class="evidence-card-title">story_value</div>
+        <div class="evidence-card-value">${article?.storyValueScore ?? 0}</div>
+      </div>
       <div class="evidence-card">
         <div class="evidence-card-title">number_count</div>
         <div class="evidence-card-value">${evidence.numberCount}</div>
@@ -1306,6 +1323,12 @@ function summarizeContextEvidence(context) {
     label,
     note,
   };
+}
+
+function findArticleByUrl(url) {
+  return Object.values(state.weekly?.categories || {})
+    .flat()
+    .find((article) => article.url === url) || null;
 }
 
 function renderArticleEvidenceBadges(evidence) {
