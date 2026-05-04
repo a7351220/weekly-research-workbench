@@ -159,6 +159,19 @@ const TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET = new Set([
   "TechNews Finance",
 ]);
 
+const TAIWAN_EN_MARKET_CORE_SOURCE_SET = new Set([
+  "Focus Taiwan Business",
+]);
+
+const TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET = new Set([
+  "Taipei Times Business",
+]);
+
+const TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET = new Set([
+  "TrendForce Semiconductors",
+  "TrendForce News",
+]);
+
 const TAIWAN_SUPPLY_CHAIN_PATTERN =
   /(台積電|鴻海|廣達|緯創|緯穎|技嘉|英業達|台達電|光寶科|欣興|南電|聯發科|創意|世芯|日月光|京元電|金像電|智邦|奇鋐|雙鴻|台燿|信驊|神達|仁寶|和碩|華碩|宏碁|微星|台廠|供應鏈|AI伺服器|資料中心|載板|散熱|PCB|CPO|矽光子|2奈米|先進封裝)/i;
 
@@ -403,6 +416,27 @@ export function scoreBaseEditorial(item: FeedItem): {
     } else if (TAIWAN_LOCAL_STORY_SOURCE_SET.has(item.source)) {
       score += 6;
       signals.add("taiwan_story_source_fit");
+    } else if (TAIWAN_EN_MARKET_CORE_SOURCE_SET.has(item.source)) {
+      score += isSupplyChainStory ? 10 : 8;
+      signals.add(
+        isSupplyChainStory
+          ? "taiwan_en_market_supply_chain_fit"
+          : "taiwan_en_market_core_fit",
+      );
+    } else if (TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET.has(item.source)) {
+      score += isSupplyChainStory ? 8 : 4;
+      signals.add(
+        isSupplyChainStory
+          ? "taiwan_en_context_supply_chain_fit"
+          : "taiwan_en_market_context_fit",
+      );
+    } else if (TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) {
+      score += isSupplyChainStory ? 14 : 1;
+      signals.add(
+        isSupplyChainStory
+          ? "taiwan_en_supply_chain_fit"
+          : "taiwan_en_supply_chain_background",
+      );
     } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 12 : 3;
       signals.add(
@@ -413,7 +447,8 @@ export function scoreBaseEditorial(item: FeedItem): {
     }
 
     if (
-      TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source) &&
+      (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source) ||
+        TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) &&
       !isSupplyChainStory
     ) {
       score -= 6;
@@ -654,6 +689,12 @@ function scoreSourceQuality(
       score += 10;
     } else if (TAIWAN_LOCAL_STORY_SOURCE_SET.has(item.source)) {
       score += 4;
+    } else if (TAIWAN_EN_MARKET_CORE_SOURCE_SET.has(item.source)) {
+      score += isSupplyChainStory ? 8 : 6;
+    } else if (TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET.has(item.source)) {
+      score += isSupplyChainStory ? 6 : 2;
+    } else if (TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) {
+      score += isSupplyChainStory ? 8 : -4;
     } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
       score += isSupplyChainStory ? 6 : -6;
     }
