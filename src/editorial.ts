@@ -1114,6 +1114,13 @@ export function buildNarrativeBundles(clusters: TopicCluster[]): NarrativeBundle
       continue;
     }
 
+    if (
+      cluster.category === "taiwan_stocks" &&
+      !cluster.topicTags.some((tag) => tag.startsWith("taiwan_"))
+    ) {
+      continue;
+    }
+
     const related = filtered
       .filter((candidate) =>
         candidate.clusterKey !== cluster.clusterKey &&
