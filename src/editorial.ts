@@ -232,6 +232,10 @@ function isTaiwanEnglishMarketStory(text: string): boolean {
   return false;
 }
 
+function isTaiwanBroadMarketStory(text: string): boolean {
+  return /(taiex|taiwan\s+shares?|stock\s+market|growth\s+outlook|gdp|economic\s+growth|rating|outlook\s+stable|u\.s\.\s+dollar|inflation|cpi|exports?|trade\s+and\s+investment|economy|台股早盤|台股開盤|台股收盤|加權指數|台灣股市|台灣經濟|成長率|評等|匯率|外資|大盤)/i.test(text);
+}
+
 export function scoreBaseEditorial(item: FeedItem): {
   score: number;
   signals: string[];
@@ -427,7 +431,7 @@ export function scoreBaseEditorial(item: FeedItem): {
     if (/(資料中心|data center|機房|雲端|CSP)/i.test(text)) {
       topicTags.add("taiwan_data_center");
     }
-    if (isEnglishMarketStory || /(台股|加權指數|TAIEX|台灣股市|台灣經濟|GDP|成長率|評等|外資|匯率)/i.test(text)) {
+    if (isTaiwanBroadMarketStory(text)) {
       topicTags.add("taiwan_market_story");
     }
     if (isSupplyChainStory) {
@@ -1389,6 +1393,8 @@ function canJoinBundle(anchor: TopicCluster, candidate: TopicCluster): boolean {
     const anchorIsMarket = anchor.topicTags.includes("taiwan_market_story");
     const candidateIsMarket = candidate.topicTags.includes("taiwan_market_story");
     const sharedEntities = intersectCount(anchor.topicEntities, candidate.topicEntities);
+    const anchorHasAiChainTag = anchor.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
+    const candidateHasAiChainTag = candidate.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
 
     if ((anchorIsAi && candidateIsEtf) || (anchorIsEtf && candidateIsAi)) {
       return false;
@@ -1417,6 +1423,12 @@ function canJoinBundle(anchor: TopicCluster, candidate: TopicCluster): boolean {
       sharedEntities === 0
     ) {
       return false;
+    }
+
+    if (((anchorIsAi && !candidateIsAi) || (candidateIsAi && !anchorIsAi)) && sharedEntities === 0) {
+      if ((anchorIsAi && !candidateHasAiChainTag) || (candidateIsAi && !anchorHasAiChainTag)) {
+        return false;
+      }
     }
   }
 
@@ -1535,6 +1547,8 @@ function isTaiwanStoryBridge(a: TopicCluster, b: TopicCluster): boolean {
   const aIsMarket = a.topicTags.includes("taiwan_market_story");
   const bIsMarket = b.topicTags.includes("taiwan_market_story");
   const sharedEntities = intersectCount(a.topicEntities, b.topicEntities);
+  const aHasAiChainTag = a.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
+  const bHasAiChainTag = b.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
 
   if ((aIsAi && bIsEtf) || (aIsEtf && bIsAi)) {
     return false;
@@ -1554,6 +1568,12 @@ function isTaiwanStoryBridge(a: TopicCluster, b: TopicCluster): boolean {
 
   if (((aIsMarket && bIsAi) || (bIsMarket && aIsAi)) && sharedEntities === 0) {
     return false;
+  }
+
+  if (((aIsAi && !bIsAi) || (bIsAi && !aIsAi)) && sharedEntities === 0) {
+    if ((aIsAi && !bHasAiChainTag) || (bIsAi && !aHasAiChainTag)) {
+      return false;
+    }
   }
 
   const sharedTaiwanTags = intersectCount(
