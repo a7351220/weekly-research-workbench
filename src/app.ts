@@ -57,7 +57,7 @@ export async function handleAppRequest(request: Request, env: Env): Promise<Resp
       });
     case "/daily/us":
     case "/daily/us.json":
-      return handleDailyUs(url, env);
+      return handleDailyUs(request, env);
     case "/sources":
       if (!isAuthorized(request, env)) {
         return unauthorizedResponse();

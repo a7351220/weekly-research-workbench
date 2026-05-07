@@ -41,8 +41,10 @@ interface DailyUsJsonPayload {
   };
   topStories: FeedItem[];
   topAiRadar: FeedItem[];
+  earningsRadar: FeedItem[];
   topClusters: ReturnType<typeof buildTopicClusters>;
   topBundles: ReturnType<typeof buildNarrativeBundles>;
+  macroCalendar: Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>;
   nextSessionWatchlist: Array<{ label: string; rationale: string; sourceUrl?: string | null }>;
   officialCalendars: Array<{ label: string; url: string; note: string }>;
   observables: string[];
@@ -99,8 +101,19 @@ const OFFICIAL_CALENDARS = [
   },
 ];
 
-export async function handleDailyUs(requestUrl: URL, env: Env): Promise<Response> {
-  const payload = await buildDailyUsPayload(requestUrl, env);
+const NASDAQ_EARNINGS_SOURCE: FeedSource = {
+  name: "Nasdaq Earnings Feed",
+  url: "https://www.nasdaq.com/feed/rssoutbound?category=earnings",
+  category: "us_stocks_macro",
+  enabledByDefault: true,
+  priority: 72,
+  sourceType: "media",
+  articleHosts: ["www.nasdaq.com", "nasdaq.com"],
+};
+
+export async function handleDailyUs(request: Request, env: Env): Promise<Response> {
+  const requestUrl = new URL(request.url);
+  const payload = await buildDailyUsPayload(requestUrl, env, request);
   if (requestUrl.pathname.endsWith(".json")) {
     return jsonResponse(payload);
   }
@@ -115,11 +128,13 @@ export async function handleDailyUs(requestUrl: URL, env: Env): Promise<Response
   });
 }
 
-async function buildDailyUsPayload(requestUrl: URL, env: Env): Promise<DailyUsJsonPayload> {
+async function buildDailyUsPayload(requestUrl: URL, env: Env, request?: Request): Promise<DailyUsJsonPayload> {
   const editorialCache = await loadDailyEditorialCache(env);
-  const [usNews, aiNews, indices, assets, megaCaps] = await Promise.all([
+  const [usNews, aiNews, earningsNews, macroCalendar, indices, assets, megaCaps] = await Promise.all([
     fetchNewsCategory("us_stocks_macro", env, editorialCache, { days: 2, limitPerSource: 8, maxItems: 24 }),
     fetchNewsCategory("ai", env, editorialCache, { days: 3, limitPerSource: 6, maxItems: 12 }),
+    fetchSpecificSources([NASDAQ_EARNINGS_SOURCE], editorialCache, { days: 5, limitPerSource: 6, maxItems: 8 }),
+    fetchBeaMacroCalendar(),
     fetchQuoteSet(INDEX_QUOTES),
     fetchQuoteSet(ASSET_QUOTES),
     fetchQuoteSet(MEGACAP_QUOTES),
@@ -128,11 +143,14 @@ async function buildDailyUsPayload(requestUrl: URL, env: Env): Promise<DailyUsJs
   const filteredAi = aiNews.items
     .filter((item) => isUsAiRadar(item))
     .slice(0, 4);
+  const earningsRadar = earningsNews.items
+    .filter((item) => /\b(earnings|results|guidance|quarter|revenue|eps|after hours|before market)\b/i.test(`${item.title} ${item.description}`))
+    .slice(0, 5);
 
-  const combinedForGrouping = sortItemsForWeekly([...usNews.items, ...filteredAi]).slice(0, 24);
+  const combinedForGrouping = sortItemsForWeekly([...usNews.items, ...filteredAi, ...earningsRadar]).slice(0, 24);
   const topClusters = buildTopicClusters(combinedForGrouping).slice(0, 6);
   const topBundles = buildNarrativeBundles(topClusters).slice(0, 4);
-  const nextSessionWatchlist = buildNextSessionWatchlist(usNews.items, filteredAi, indices, assets, megaCaps);
+  const nextSessionWatchlist = buildNextSessionWatchlist(usNews.items, filteredAi, earningsRadar, macroCalendar, indices, assets, megaCaps);
   const observables = buildObservables(indices, assets, megaCaps, usNews.items);
 
   return {
@@ -140,7 +158,7 @@ async function buildDailyUsPayload(requestUrl: URL, env: Env): Promise<DailyUsJs
     reportType: "us_daily_market_digest",
     generatedAt: new Date().toISOString(),
     reportDate: getNewYorkDateString(),
-    sourceUrl: `${requestUrl.origin}/daily/us`,
+    sourceUrl: `${resolvePublicOrigin(requestUrl, request)}/daily/us`,
     marketSummary: {
       indices,
       assets,
@@ -148,13 +166,27 @@ async function buildDailyUsPayload(requestUrl: URL, env: Env): Promise<DailyUsJs
     },
     topStories: usNews.items.slice(0, 6),
     topAiRadar: filteredAi,
+    earningsRadar,
     topClusters,
     topBundles,
+    macroCalendar,
     nextSessionWatchlist,
     officialCalendars: OFFICIAL_CALENDARS,
     observables,
-    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds],
+    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds, ...earningsNews.failedFeeds],
   };
+}
+
+function resolvePublicOrigin(requestUrl: URL, request?: Request): string {
+  if (!request) {
+    return requestUrl.origin;
+  }
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const forwardedHost = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (forwardedProto && forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+  return requestUrl.origin;
 }
 
 async function loadDailyEditorialCache(env: Env): Promise<EditorialCachePayload | null> {
@@ -216,6 +248,83 @@ async function fetchNewsCategory(
     items: sortItemsForWeekly(items).slice(0, options.maxItems),
     failedFeeds,
   };
+}
+
+async function fetchSpecificSources(
+  sources: FeedSource[],
+  editorialCache: EditorialCachePayload | null,
+  options: { days: number; limitPerSource: number; maxItems: number },
+): Promise<{ items: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
+  const params: WeeklyQueryParams = {
+    days: options.days,
+    limitPerSource: options.limitPerSource,
+    includeTaiwan: false,
+    categories: ["us_stocks_macro"],
+    sources: null,
+    usePrivateSignals: true,
+    useBlockBeats: true,
+    useOpenNews: true,
+    useTwitterKols: true,
+    keyword: null,
+    maxItemsPerCategory: options.maxItems,
+  };
+  const results = await Promise.all(sources.map((source) => fetchFeed(source, params)));
+  const dedupe = new Set<string>();
+  const items: FeedItem[] = [];
+  const failedFeeds: Array<{ source: string; reason: string; status: number | null }> = [];
+  for (const result of results) {
+    if (result.failedFeed) {
+      failedFeeds.push({
+        source: result.failedFeed.source,
+        reason: result.failedFeed.reason,
+        status: result.failedFeed.status,
+      });
+    }
+    for (const item of result.items) {
+      const key = normalizeUrl(item.url);
+      if (dedupe.has(key)) continue;
+      dedupe.add(key);
+      items.push(enrichWithEditorialSignals(item, editorialCache?.topics ?? []));
+    }
+  }
+  return { items: sortItemsForWeekly(items).slice(0, options.maxItems), failedFeeds };
+}
+
+async function fetchBeaMacroCalendar(): Promise<Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>> {
+  const url = "https://www.bea.gov/news/schedule";
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "user-agent": "weekly-rss-middleware/1.0",
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+    if (!response.ok) {
+      return [];
+    }
+    const html = await response.text();
+    const entries: Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string; sortKey: number }> = [];
+    const rowRegex = /<tr class="scheduled-releases-type-[^"]+">[\s\S]*?<div class="release-date">([^<]+)<\/div>\s*<small class="text-muted">([^<]+)<\/small>[\s\S]*?<td class="release-title[^"]*"[^>]*>([^<]+)<\/td>/g;
+    const currentYear = new Date().getFullYear();
+    for (const match of html.matchAll(rowRegex)) {
+      const [, dateLabelRaw, timeLabelRaw, titleRaw] = match;
+      const dateLabel = dateLabelRaw.trim();
+      const timeLabel = timeLabelRaw.trim();
+      const title = titleRaw.trim();
+      const parsed = Date.parse(`${dateLabel}, ${currentYear} ${timeLabel} America/New_York`);
+      const fallback = Date.parse(`${dateLabel}, ${currentYear}`);
+      const sortKey = Number.isFinite(parsed) ? parsed : (Number.isFinite(fallback) ? fallback : Number.MAX_SAFE_INTEGER);
+      entries.push({ dateLabel, timeLabel, title, sourceUrl: url, sortKey });
+    }
+    const now = Date.now();
+    return entries
+      .filter((entry) => entry.sortKey >= now - 12 * 60 * 60 * 1000)
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .slice(0, 5)
+      .map(({ dateLabel, timeLabel, title, sourceUrl }) => ({ dateLabel, timeLabel, title, sourceUrl }));
+  } catch {
+    return [];
+  }
 }
 
 async function fetchQuoteSet(configs: QuoteConfig[]): Promise<QuoteSnapshot[]> {
@@ -359,13 +468,15 @@ function buildObservables(
 function buildNextSessionWatchlist(
   topStories: FeedItem[],
   aiRadar: FeedItem[],
+  earningsRadar: FeedItem[],
+  macroCalendar: Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>,
   indices: QuoteSnapshot[],
   assets: QuoteSnapshot[],
   megaCaps: QuoteSnapshot[],
 ): Array<{ label: string; rationale: string; sourceUrl?: string | null }> {
   const watchlist: Array<{ label: string; rationale: string; sourceUrl?: string | null }> = [];
 
-  for (const item of [...topStories, ...aiRadar]) {
+  for (const item of [...topStories, ...aiRadar, ...earningsRadar]) {
     if (watchlist.length >= 5) break;
     if (/(earnings|guidance|forecast|cpi|ppi|jobs|payrolls|fomc|fed|treasury|tariff|rate cut|inflation)/i.test(`${item.title} ${item.description}`)) {
       watchlist.push({
@@ -374,6 +485,14 @@ function buildNextSessionWatchlist(
         sourceUrl: item.url,
       });
     }
+  }
+  for (const event of macroCalendar) {
+    if (watchlist.length >= 5) break;
+    watchlist.push({
+      label: `${event.dateLabel} ${event.timeLabel} · ${event.title}`,
+      rationale: `Official BEA release on the schedule. This is a hard macro checkpoint for the next US session.`,
+      sourceUrl: event.sourceUrl,
+    });
   }
 
   const spx = quoteByKey(indices, "spx");
@@ -495,6 +614,28 @@ function renderDailyUsHtml(payload: DailyUsJsonPayload): string {
       <h2>AI & Big Tech Radar</h2>
       <article class="card">
         ${payload.topAiRadar.map((item) => renderStory(item)).join("") || `<p>No AI / Big Tech radar items cleared the relevance threshold.</p>`}
+      </article>
+    </section>
+
+    <section id="earnings-radar">
+      <h2>Earnings Radar</h2>
+      <article class="card">
+        ${payload.earningsRadar.map((item) => renderStory(item)).join("") || `<p>No earnings radar items cleared the threshold.</p>`}
+      </article>
+    </section>
+
+    <section id="macro-calendar">
+      <h2>Next Macro Releases</h2>
+      <article class="card">
+        <ul class="stack">
+          ${payload.macroCalendar.map((item) => `
+            <li>
+              <strong>${escapeHtml(item.dateLabel)} ${escapeHtml(item.timeLabel)}</strong>
+              <p>${escapeHtml(item.title)}</p>
+              <p class="tags"><a href="${escapeAttribute(item.sourceUrl)}">official schedule</a></p>
+            </li>
+          `).join("") || `<li>No upcoming macro release entries were parsed from the official schedule.</li>`}
+        </ul>
       </article>
     </section>
 

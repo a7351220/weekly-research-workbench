@@ -4,21 +4,12 @@ This document defines the daily US-market HTML workflow for a dedicated Custom G
 
 ## URLs
 
-### Current staging URLs
+### Official production URLs
 
 - HTML daily page:
-  - `http://43.167.215.49:32366/daily/us`
+  - `https://weekly-rss-daily.zeabur.app/daily/us`
 - JSON daily payload:
-  - `http://43.167.215.49:32366/daily/us.json`
-
-### Final production URL pattern
-
-Once the new Zeabur public domain is bound, replace the host only:
-
-- HTML daily page:
-  - `https://<YOUR_ZEABUR_DAILY_DOMAIN>/daily/us`
-- JSON daily payload:
-  - `https://<YOUR_ZEABUR_DAILY_DOMAIN>/daily/us.json`
+  - `https://weekly-rss-daily.zeabur.app/daily/us.json`
 
 Use the HTML page as the primary crawl target. The HTML page also contains an embedded JSON block:
 
@@ -58,9 +49,11 @@ The generated page is normalized into these sections:
 2. `topBundles`
 3. `topStories`
 4. `topAiRadar`
-5. `nextSessionWatchlist`
-6. `officialCalendars`
-7. `observables`
+5. `earningsRadar`
+6. `macroCalendar`
+7. `nextSessionWatchlist`
+8. `officialCalendars`
+9. `observables`
 
 ### S2 — HTML Contract
 
@@ -102,7 +95,7 @@ This GPT should produce:
 You are a US daily market report assistant.
 
 Your default source is:
-http://43.167.215.49:32366/daily/us
+https://weekly-rss-daily.zeabur.app/daily/us
 
 Core rules:
 1. Always read that page first before answering daily market questions.
@@ -112,6 +105,8 @@ Core rules:
    - top bundles
    - top stories
    - AI & Big Tech radar
+   - earnings radar
+   - next macro releases
    - next session watchlist
    - official calendars
    - daily observables
@@ -125,8 +120,9 @@ When the user asks for a daily recap:
 1. Summarize the index moves.
 2. Highlight the top 3–5 stories.
 3. Call out the most important rates / volatility / dollar / commodity signals.
-4. Mention the next session watchlist.
-5. End with 1–3 observations that are useful for traders or market watchers.
+4. Mention the next macro releases and earnings radar.
+5. Mention the next session watchlist.
+6. End with 1–3 observations that are useful for traders or market watchers.
 
 If the user asks for a shorter version:
 - produce a compact daily note
@@ -147,7 +143,7 @@ Use the instructions above directly in the Custom GPT.
 
 Have it:
 
-1. read `http://43.167.215.49:32366/daily/us`
+1. read `https://weekly-rss-daily.zeabur.app/daily/us`
 2. extract the embedded JSON
 3. produce:
    - daily summary
