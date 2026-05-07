@@ -50,30 +50,30 @@ interface DailyUsJsonPayload {
 }
 
 const INDEX_QUOTES: QuoteConfig[] = [
-  { key: "spx", label: "S&P 500", symbol: "^GSPC", kind: "index", sourceUrl: "https://finance.yahoo.com/quote/%5EGSPC" },
-  { key: "ndx", label: "Nasdaq Composite", symbol: "^IXIC", kind: "index", sourceUrl: "https://finance.yahoo.com/quote/%5EIXIC" },
-  { key: "dji", label: "Dow Jones", symbol: "^DJI", kind: "index", sourceUrl: "https://finance.yahoo.com/quote/%5EDJI" },
-  { key: "rut", label: "Russell 2000", symbol: "^RUT", kind: "index", sourceUrl: "https://finance.yahoo.com/quote/%5ERUT" },
-  { key: "sox", label: "PHLX SOX", symbol: "^SOX", kind: "index", sourceUrl: "https://finance.yahoo.com/quote/%5ESOX" },
+  { key: "spx", label: "S&P 500", symbol: ".SPX", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.SPX" },
+  { key: "ndx", label: "Nasdaq Composite", symbol: ".IXIC", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.IXIC" },
+  { key: "dji", label: "Dow Jones", symbol: ".DJI", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.DJI" },
+  { key: "rut", label: "Russell 2000", symbol: ".RUT", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.RUT" },
+  { key: "sox", label: "PHLX SOX", symbol: ".SOX", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.SOX" },
 ];
 
 const ASSET_QUOTES: QuoteConfig[] = [
-  { key: "vix", label: "VIX", symbol: "^VIX", kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/%5EVIX" },
-  { key: "dxy", label: "DXY", symbol: "DX-Y.NYB", kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/DX-Y.NYB" },
-  { key: "us10y", label: "US 10Y", symbol: "^TNX", kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/%5ETNX" },
-  { key: "wti", label: "WTI", symbol: "CL=F", kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/CL%3DF" },
-  { key: "gold", label: "Gold", symbol: "GC=F", kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/GC%3DF" },
-  { key: "btc", label: "BTC", symbol: "BTC-USD", kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/BTC-USD" },
+  { key: "vix", label: "VIX", symbol: ".VIX", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/.VIX" },
+  { key: "dxy", label: "DXY", symbol: ".DXY", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/.DXY" },
+  { key: "us10y", label: "US 10Y", symbol: ".TNX", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/.TNX" },
+  { key: "wti", label: "WTI", symbol: "@CL.1", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/@CL.1" },
+  { key: "gold", label: "Gold", symbol: "@GC.1", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/@GC.1" },
+  { key: "btc", label: "BTC", symbol: "BTC.CM=", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/BTC.CM=" },
 ];
 
 const MEGACAP_QUOTES: QuoteConfig[] = [
-  { key: "aapl", label: "Apple", symbol: "AAPL", kind: "stock", sourceUrl: "https://finance.yahoo.com/quote/AAPL" },
-  { key: "msft", label: "Microsoft", symbol: "MSFT", kind: "stock", sourceUrl: "https://finance.yahoo.com/quote/MSFT" },
-  { key: "nvda", label: "NVIDIA", symbol: "NVDA", kind: "stock", sourceUrl: "https://finance.yahoo.com/quote/NVDA" },
-  { key: "amzn", label: "Amazon", symbol: "AMZN", kind: "stock", sourceUrl: "https://finance.yahoo.com/quote/AMZN" },
-  { key: "googl", label: "Alphabet", symbol: "GOOGL", kind: "stock", sourceUrl: "https://finance.yahoo.com/quote/GOOGL" },
-  { key: "meta", label: "Meta", symbol: "META", kind: "stock", sourceUrl: "https://finance.yahoo.com/quote/META" },
-  { key: "tsla", label: "Tesla", symbol: "TSLA", kind: "stock", sourceUrl: "https://finance.yahoo.com/quote/TSLA" },
+  { key: "aapl", label: "Apple", symbol: "AAPL", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/AAPL" },
+  { key: "msft", label: "Microsoft", symbol: "MSFT", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/MSFT" },
+  { key: "nvda", label: "NVIDIA", symbol: "NVDA", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/NVDA" },
+  { key: "amzn", label: "Amazon", symbol: "AMZN", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/AMZN" },
+  { key: "googl", label: "Alphabet", symbol: "GOOGL", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/GOOGL" },
+  { key: "meta", label: "Meta", symbol: "META", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/META" },
+  { key: "tsla", label: "Tesla", symbol: "TSLA", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/TSLA" },
 ];
 
 const OFFICIAL_CALENDARS = [
@@ -223,7 +223,7 @@ async function fetchQuoteSet(configs: QuoteConfig[]): Promise<QuoteSnapshot[]> {
 }
 
 async function fetchQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(config.symbol)}?range=5d&interval=1d&includePrePost=false&events=div%2Csplits`;
+  const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${encodeURIComponent(config.symbol)}&requestMethod=quick`;
   try {
     const response = await fetch(url, {
       headers: {
@@ -234,23 +234,20 @@ async function fetchQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
     if (!response.ok) {
       throw new Error(`quote ${config.symbol} failed: ${response.status}`);
     }
-    const payload = await response.json() as YahooChartResponse;
-    const result = payload.chart?.result?.[0];
-    const meta = result?.meta;
-    const closes = result?.indicators?.quote?.[0]?.close ?? [];
-    const previousClose = typeof meta?.chartPreviousClose === "number"
-      ? meta.chartPreviousClose
-      : lastNonNull(closes.slice(0, -1));
-    let price = typeof meta?.regularMarketPrice === "number" ? meta.regularMarketPrice : lastNonNull(closes);
-
-    if (config.symbol === "^TNX") {
-      if (typeof previousClose === "number") {
-        return finalizeQuote(config, previousClose / 10, price !== null ? price / 10 : null, meta?.regularMarketTime ?? null);
-      }
-      return finalizeQuote(config, null, price !== null ? price / 10 : null, meta?.regularMarketTime ?? null);
+    const payload = await response.json() as CnbcQuoteResponse;
+    const quote = payload.FormattedQuoteResult?.FormattedQuote?.[0];
+    if (!quote || quote.code !== 0) {
+      throw new Error(`quote ${config.symbol} unavailable`);
     }
-
-    return finalizeQuote(config, previousClose ?? null, price ?? null, meta?.regularMarketTime ?? null);
+    const price = parseLooseNumber(quote.last);
+    const change = parseLooseNumber(quote.change);
+    const changePct = parsePercentString(quote.change_pct);
+    const previousClose = price !== null && change !== null ? price - change : null;
+    const asOf = normalizeCnbcTime(quote.last_time);
+    if (config.symbol === ".TNX") {
+      return finalizeQuote(config, previousClose !== null ? previousClose / 10 : null, price !== null ? price / 10 : null, null, change !== null ? change / 10 : null, changePct, asOf);
+    }
+    return finalizeQuote(config, previousClose, price, null, change, changePct, asOf);
   } catch {
     return {
       key: config.key,
@@ -272,9 +269,12 @@ function finalizeQuote(
   previousClose: number | null,
   price: number | null,
   regularMarketTime: number | null,
+  explicitChange?: number | null,
+  explicitChangePct?: number | null,
+  explicitAsOf?: string | null,
 ): QuoteSnapshot {
-  const change = price !== null && previousClose !== null ? price - previousClose : null;
-  const changePct = change !== null && previousClose ? (change / previousClose) * 100 : null;
+  const change = explicitChange ?? (price !== null && previousClose !== null ? price - previousClose : null);
+  const changePct = explicitChangePct ?? (change !== null && previousClose ? (change / previousClose) * 100 : null);
   return {
     key: config.key,
     label: config.label,
@@ -284,7 +284,7 @@ function finalizeQuote(
     previousClose,
     change,
     changePct,
-    asOf: regularMarketTime ? new Date(regularMarketTime * 1000).toISOString() : null,
+    asOf: explicitAsOf ?? (regularMarketTime ? new Date(regularMarketTime * 1000).toISOString() : null),
     sourceUrl: config.sourceUrl,
   };
 }
@@ -580,16 +580,6 @@ function quoteByKey(items: QuoteSnapshot[], key: string): QuoteSnapshot | undefi
   return items.find((item) => item.key === key);
 }
 
-function lastNonNull(values: Array<number | null | undefined>): number | null {
-  for (let i = values.length - 1; i >= 0; i -= 1) {
-    const value = values[i];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-  }
-  return null;
-}
-
 function formatSigned(value: number, digits: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
 }
@@ -623,18 +613,37 @@ function getNewYorkDateString(): string {
 }
 
 interface YahooChartResponse {
-  chart?: {
-    result?: Array<{
-      meta?: {
-        regularMarketPrice?: number;
-        chartPreviousClose?: number;
-        regularMarketTime?: number;
-      };
-      indicators?: {
-        quote?: Array<{
-          close?: Array<number | null>;
-        }>;
-      };
+  chart?: never;
+}
+
+interface CnbcQuoteResponse {
+  FormattedQuoteResult?: {
+    FormattedQuote?: Array<{
+      code?: number;
+      last?: string;
+      change?: string;
+      change_pct?: string;
+      last_time?: string;
     }>;
   };
+}
+
+function parseLooseNumber(value: string | undefined): number | null {
+  if (!value) return null;
+  const normalized = value.replaceAll(",", "").trim();
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePercentString(value: string | undefined): number | null {
+  if (!value) return null;
+  const normalized = value.replace("%", "").replaceAll(",", "").trim();
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeCnbcTime(value: string | undefined): string | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : value;
 }
