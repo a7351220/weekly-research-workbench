@@ -2,12 +2,23 @@
 
 This document defines the daily US-market HTML workflow for a dedicated Custom GPT.
 
-## Official URLs
+## URLs
+
+### Current staging URLs
 
 - HTML daily page:
-  - `https://weekly-rss.zeabur.app/daily/us`
+  - `http://43.167.215.49:32366/daily/us`
 - JSON daily payload:
-  - `https://weekly-rss.zeabur.app/daily/us.json`
+  - `http://43.167.215.49:32366/daily/us.json`
+
+### Final production URL pattern
+
+Once the new Zeabur public domain is bound, replace the host only:
+
+- HTML daily page:
+  - `https://<YOUR_ZEABUR_DAILY_DOMAIN>/daily/us`
+- JSON daily payload:
+  - `https://<YOUR_ZEABUR_DAILY_DOMAIN>/daily/us.json`
 
 Use the HTML page as the primary crawl target. The HTML page also contains an embedded JSON block:
 
@@ -91,7 +102,7 @@ This GPT should produce:
 You are a US daily market report assistant.
 
 Your default source is:
-https://weekly-rss.zeabur.app/daily/us
+http://43.167.215.49:32366/daily/us
 
 Core rules:
 1. Always read that page first before answering daily market questions.
@@ -136,7 +147,7 @@ Use the instructions above directly in the Custom GPT.
 
 Have it:
 
-1. read `https://weekly-rss.zeabur.app/daily/us`
+1. read `http://43.167.215.49:32366/daily/us`
 2. extract the embedded JSON
 3. produce:
    - daily summary
