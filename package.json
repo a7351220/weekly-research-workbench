@@ -3,16 +3,32 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "check": "tsc --noEmit"
+    "dev:zeabur": "tsx watch src/node-server.ts",
+    "build": "esbuild src/node-server.ts --bundle --platform=node --format=esm --outfile=dist/node-server.js",
+    "check": "tsc --noEmit",
+    "deploy": "npm run deploy:worker",
+    "deploy:worker": "npx -y node@22 ./node_modules/wrangler/bin/wrangler.js deploy",
+    "deploy:worker:debug": "WRANGLER_LOG=debug WRANGLER_LOG_SANITIZE=false npx -y node@22 ./node_modules/wrangler/bin/wrangler.js deploy",
+    "deploy:pages": "cd workbench && npx -y node@22 ../node_modules/wrangler/bin/wrangler.js pages deploy . --project-name weekly-research-workbench --branch main",
+    "deploy:pages:debug": "cd workbench && WRANGLER_LOG=debug WRANGLER_LOG_SANITIZE=false npx -y node@22 ../node_modules/wrangler/bin/wrangler.js pages deploy . --project-name weekly-research-workbench --branch main",
+    "deploy:all": "npm run deploy:worker && npm run deploy:pages",
+    "start": "node dist/node-server.js"
   },
   "dependencies": {
-    "fast-xml-parser": "latest"
+    "@hono/node-server": "^1.19.6",
+    "esbuild": "^0.25.11",
+    "fast-xml-parser": "latest",
+    "hono": "^4.10.1",
+    "tsx": "^4.20.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
+    "@types/node": "^24.10.1",
     "@playwright/test": "^1.59.1",
     "typescript": "latest",
     "wrangler": "latest"

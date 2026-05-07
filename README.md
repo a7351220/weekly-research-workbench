@@ -4,7 +4,7 @@ A lightweight market-research stack for weekly report workflows.
 
 This repo contains two pieces:
 
-1. A `Cloudflare Worker` that fetches fixed RSS sources, normalizes them, clusters them, and exposes stable JSON.
+1. A `fixed-source API` that can run on either `Cloudflare Workers` or a `Node/Hono` service (for example on Zeabur), fetches fixed RSS sources, normalizes them, clusters them, and exposes stable JSON.
 2. A `TUI-style workbench` that lets you inspect topics, open source context, pin stories, tag `core / related`, and export a research pack before writing.
 
 The project is designed for a simple rule:
@@ -17,7 +17,7 @@ It does **not** use general web search as a fallback, and it does **not** try to
 
 ```mermaid
 flowchart LR
-  A[Fixed RSS Sources] --> B[Cloudflare Worker]
+  A[Fixed RSS Sources] --> B[Weekly Research API]
   B --> C["/weekly"]
   B --> D["/source-context"]
   C --> E[TUI Research Workbench]
@@ -35,7 +35,7 @@ flowchart LR
 
 ### `src/`
 
-Cloudflare Worker source code.
+API source code shared across the Worker runtime and the Zeabur Node/Hono runtime.
 
 - `index.ts`: routing and API responses
 - `rss.ts`: RSS parsing and normalization
@@ -55,11 +55,11 @@ Static frontend research console.
 - article selection and `core / related` tagging
 - research export as JSON / Markdown
 
-## What the Worker does
+## What the API does
 
-The Worker sits between fixed news feeds and downstream GPT/report workflows:
+The API sits between fixed news feeds and downstream GPT/report workflows:
 
-`RSS feeds -> Worker -> cleaned JSON -> workbench / GPT`
+`RSS feeds -> API -> cleaned JSON -> workbench / GPT`
 
 Core responsibilities:
 
@@ -71,7 +71,7 @@ Core responsibilities:
 - cluster articles into themes
 - expose a stable API for selection and downstream writing
 
-The Worker intentionally does **not**:
+The API intentionally does **not**:
 
 - fall back to search engines
 - scrape arbitrary websites as replacement sources
@@ -1154,16 +1154,43 @@ Then open:
 http://127.0.0.1:4173
 ```
 
-Set `api_base` in the UI to your current Worker domain or local Worker address.
+Set `api_base` in the UI to your current API domain or local API address.
 
 ## Deploy
 
-### Deploy the Worker
+### Deploy the Cloudflare Worker
 
 ```bash
 npm install
 npm run deploy
 ```
+
+### Run or deploy the Node/Hono API
+
+Local Node runtime:
+
+```bash
+npm install
+npm run start
+```
+
+Zeabur-friendly files included:
+
+- `src/node-server.ts`
+- `zeabur.json`
+
+Recommended Zeabur shape:
+
+- create a dedicated project, e.g. `weekly-research-api`
+- deploy the repo root as a Node service
+- public production domain:
+  - `https://weekly-rss.zeabur.app`
+- keep the same routes:
+  - `/health`
+  - `/sources`
+  - `/weekly`
+  - `/source-context`
+  - `/openapi.yaml`
 
 ### Deploy the workbench to Cloudflare Pages
 
@@ -1181,7 +1208,13 @@ The repo includes:
 - `openapi.yaml`
 - `src/openapi.ts`
 
-You can use either the checked-in schema file or the deployed Worker schema endpoint for downstream integrations.
+You can use either the checked-in schema file or the deployed schema endpoint for downstream integrations.
+
+Important:
+
+- the production Zeabur Action import URL is:
+  - `https://weekly-rss.zeabur.app/openapi.yaml`
+- the checked-in `openapi.yaml` now defaults to the Zeabur production domain
 
 ## Failure handling
 

@@ -26,6 +26,37 @@ const TOPIC_TAG_LABELS = {
   price_action: "價格反應",
 };
 
+const SCORE_METRICS = {
+  sourceQualityScore: { short: "src", thresholds: [40, 60, 80], labels: ["弱", "中", "強", "硬"] },
+  evidenceScore: { short: "ev", thresholds: [30, 50, 70], labels: ["少", "中", "多", "厚"] },
+  substantiationScore: { short: "sub", thresholds: [35, 55, 75], labels: ["鬆", "中", "實", "硬"] },
+  corroborationScore: { short: "co", thresholds: [15, 35, 55], labels: ["單", "初", "多", "穩"] },
+  marketReactionScore: { short: "mr", thresholds: [10, 25, 45], labels: ["靜", "微", "動", "熱"] },
+  storyValueScore: { short: "story", thresholds: [30, 50, 70], labels: ["散", "可", "成", "主"] },
+  editorialScore: { short: "total", thresholds: [45, 70, 95], labels: ["弱", "可", "強", "前"] },
+};
+
+const SCORE_HELP = {
+  sourceQualityScore: "來源硬度。官方、主流媒體、研究型來源會更高；聚合站或轉述型來源會更低。",
+  evidenceScore: "證據密度。主要看這篇有多少可引用數字、引文與重點段落。",
+  substantiationScore: "支撐度。不是只有有數字，而是標題結論和正文證據有沒有真的對上。",
+  corroborationScore: "交叉驗證。看有多少不同來源、不同類型來源在講同一件事。",
+  marketReactionScore: "市場反應。看標題或內容有沒有明確股價、指數、ETF、資金流反應。",
+  storyValueScore: "故事價值。看這篇能不能和別的文章串成 cluster 或 bundle，而不是單點雜訊。",
+  editorialScore: "總分。綜合來源、證據、支撐度、交叉驗證、市場反應與故事價值後得到的排序分數。",
+  number_count: "這篇目前抓到的可驗證數字數量。通常越多越容易寫進週報。",
+  quote_count: "這篇抓到的直接引文數量。引文越多，越適合支撐口播或投影片敘述。",
+  paragraph_count: "這篇抓到的重點段落數量。段落多，通常代表正文支撐比較完整。",
+  fact_strength: "對這篇 source-context 的整體事實密度判斷。會參考數字、引文和重點段落，不是單純看字數。",
+  src: "來源硬度。看來源本身夠不夠硬。",
+  ev: "證據密度。看數字、引文、重點段落夠不夠多。",
+  sub: "支撐度。看結論和證據有沒有對上。",
+  co: "交叉驗證。看是不是多來源確認。",
+  mr: "市場反應。看市場有沒有真的投票。",
+  story: "故事價值。看能不能長成主線。",
+  total: "綜合總分，用來做整體排序。",
+};
+
 const state = {
   weekly: null,
   topics: [],
@@ -754,6 +785,7 @@ function renderTopics() {
   elements.topicsList.innerHTML = "";
   ensureVisibleTopicTab();
   const visibleTopics = getVisibleTopics();
+  const topicBaselines = buildScoreBaselines(visibleTopics.map((topic) => topic.scores));
   elements.topicsMeta.textContent = formatTopicMeta(visibleTopics.length, state.topics.length);
   renderTabs();
 
@@ -791,10 +823,10 @@ function renderTopics() {
     title.textContent = topic.title;
     summary.textContent = topic.summary || "no summary";
     tags.innerHTML = renderTopicTagBadges(topic.topicTags || [], topic.categories || []);
-    meta.textContent = `${topic.itemCount} articles / ${topic.sourceCount} sources / ${topic.categories.join(", ")} / src ${topic.scores.sourceQualityScore} / ev ${topic.scores.evidenceScore} / sub ${topic.scores.substantiationScore} / co ${topic.scores.corroborationScore} / mr ${topic.scores.marketReactionScore} / story ${topic.scores.storyValueScore} / total ${topic.scores.editorialScore}`;
+    meta.innerHTML = `<div>${topic.itemCount} articles / ${topic.sourceCount} sources / ${topic.categories.join(", ")}</div>${formatScoreSummary(topic.scores, topicBaselines)}`;
     const officialBackedCount = countOfficialBackedArticles(topic);
     const strongEvidenceCount = countStrongEvidenceArticles(topic);
-    meta.textContent += ` / off ${officialBackedCount} / strong ${strongEvidenceCount}`;
+    meta.innerHTML += `<div>off ${officialBackedCount} / strong ${strongEvidenceCount}</div>`;
     const topicState = state.selections[`topic:${topic.key}`] || {};
     pinned.checked = Boolean(topicState.pinned);
     note.value = topicState.note || "";
@@ -1019,6 +1051,7 @@ function renderArticles() {
 
   const topic = state.topics.find((entry) => entry.key === state.selectedTopicKey);
   const articles = getTopicArticles(topic);
+  const articleBaselines = buildScoreBaselines(articles);
   elements.articlesMeta.textContent = String(articles.length);
 
   if (!articles.length) {
@@ -1040,7 +1073,7 @@ function renderArticles() {
     const articleContext = state.contexts[article.url];
     const evidence = summarizeContextEvidence(articleContext);
     openButton.textContent = article.title;
-    meta.textContent = `${article.source} / ${article.publishedAt || "no date"} / src ${article.sourceQualityScore ?? 0} / ev ${article.evidenceScore ?? 0} / sub ${article.substantiationScore ?? 0} / co ${article.corroborationScore ?? 0} / mr ${article.marketReactionScore ?? 0} / story ${article.storyValueScore ?? 0} / total ${article.editorialScore ?? article.reportScore ?? 0}`;
+    meta.innerHTML = `<div>${article.source} / ${article.publishedAt || "no date"}</div>${formatScoreSummary(article, articleBaselines)}`;
     links.innerHTML = `
       ${topic ? topic.title : "topic"} /
       <a href="${article.url}" target="_blank" rel="noreferrer">open source</a>
@@ -1123,8 +1156,12 @@ function summarizeScores(items) {
   if (!items.length) {
     return {
       sourceQualityScore: 0,
+      evidenceScore: 0,
+      substantiationScore: 0,
       corroborationScore: 0,
       marketReactionScore: 0,
+      storyValueScore: 0,
+      editorialScore: 0,
     };
   }
 
@@ -1140,6 +1177,67 @@ function summarizeScores(items) {
     storyValueScore: avg("storyValueScore"),
     editorialScore: avg("editorialScore"),
   };
+}
+
+function buildScoreBaselines(rows) {
+  const baselines = {};
+  for (const key of Object.keys(SCORE_METRICS)) {
+    const values = rows
+      .map((row) => Number(row?.[key] ?? 0))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => a - b);
+    baselines[key] = median(values);
+  }
+  return baselines;
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const mid = Math.floor(values.length / 2);
+  return values.length % 2 ? values[mid] : Math.round((values[mid - 1] + values[mid]) / 2);
+}
+
+function describeScore(value, metricKey) {
+  const config = SCORE_METRICS[metricKey];
+  if (!config) return { short: metricKey, label: "" };
+  const [t1, t2, t3] = config.thresholds;
+  const idx = value < t1 ? 0 : value < t2 ? 1 : value < t3 ? 2 : 3;
+  return { short: config.short, label: config.labels[idx] };
+}
+
+function formatScoreDelta(value, baseline) {
+  const diff = Math.round(value - (baseline ?? 0));
+  if (diff === 0) return "±0";
+  return diff > 0 ? `+${diff}` : `${diff}`;
+}
+
+function buildScoreBar(value, metricKey, baseline) {
+  const rounded = Math.round(Number(value ?? 0));
+  const meta = describeScore(rounded, metricKey);
+  const delta = formatScoreDelta(rounded, baseline ?? 0);
+  const width = Math.max(0, Math.min(100, rounded));
+  const help = escapeHtml(SCORE_HELP[metricKey] || SCORE_HELP[meta.short] || "");
+  return `
+    <div class="score-row">
+      <div class="score-key"><span class="help-pill" data-help="${help}">${meta.short}</span></div>
+      <div class="score-bar"><div class="score-fill" style="width:${width}%"></div></div>
+      <div class="score-text">${rounded} ${delta}</div>
+    </div>
+  `;
+}
+
+function formatScoreSummary(scores, baselines = {}) {
+  return `
+    <div class="score-stack">
+      ${Object.keys(SCORE_METRICS)
+        .map((key) => buildScoreBar(scores?.[key] ?? 0, key, baselines[key] ?? 0))
+        .join("")}
+    </div>
+  `;
+}
+
+function formatScoreCard(value, metricKey, baseline) {
+  return buildScoreBar(value, metricKey, baseline);
 }
 
 function getTopicArticles(topic) {
@@ -1221,6 +1319,8 @@ function renderContext() {
 
   const context = state.contexts[articleUrl];
   const article = findArticleByUrl(articleUrl);
+  const topic = state.topics.find((entry) => entry.key === state.selectedTopicKey);
+  const contextBaselines = buildScoreBaselines(getTopicArticles(topic));
   if (!context) {
     elements.contextMeta.textContent = "loading";
     elements.contextView.innerHTML = `<div class="context-empty">loading ...</div>`;
@@ -1248,35 +1348,35 @@ function renderContext() {
     </div>
     <div class="evidence-grid">
       <div class="evidence-card">
-        <div class="evidence-card-title">source_score</div>
-        <div class="evidence-card-value">${article?.sourceQualityScore ?? 0}</div>
+        <div class="evidence-card-title">${renderHelpTitle("source_score", "sourceQualityScore")}</div>
+        <div class="evidence-card-value">${formatScoreCard(article?.sourceQualityScore ?? 0, "sourceQualityScore", contextBaselines.sourceQualityScore)}</div>
       </div>
       <div class="evidence-card">
-        <div class="evidence-card-title">evidence_score</div>
-        <div class="evidence-card-value">${article?.evidenceScore ?? 0}</div>
+        <div class="evidence-card-title">${renderHelpTitle("evidence_score", "evidenceScore")}</div>
+        <div class="evidence-card-value">${formatScoreCard(article?.evidenceScore ?? 0, "evidenceScore", contextBaselines.evidenceScore)}</div>
       </div>
       <div class="evidence-card">
-        <div class="evidence-card-title">substantiation</div>
-        <div class="evidence-card-value">${article?.substantiationScore ?? 0}</div>
+        <div class="evidence-card-title">${renderHelpTitle("substantiation", "substantiationScore")}</div>
+        <div class="evidence-card-value">${formatScoreCard(article?.substantiationScore ?? 0, "substantiationScore", contextBaselines.substantiationScore)}</div>
       </div>
       <div class="evidence-card">
-        <div class="evidence-card-title">story_value</div>
-        <div class="evidence-card-value">${article?.storyValueScore ?? 0}</div>
+        <div class="evidence-card-title">${renderHelpTitle("story_value", "storyValueScore")}</div>
+        <div class="evidence-card-value">${formatScoreCard(article?.storyValueScore ?? 0, "storyValueScore", contextBaselines.storyValueScore)}</div>
       </div>
       <div class="evidence-card">
-        <div class="evidence-card-title">number_count</div>
+        <div class="evidence-card-title">${renderHelpTitle("number_count", "number_count")}</div>
         <div class="evidence-card-value">${evidence.numberCount}</div>
       </div>
       <div class="evidence-card">
-        <div class="evidence-card-title">quote_count</div>
+        <div class="evidence-card-title">${renderHelpTitle("quote_count", "quote_count")}</div>
         <div class="evidence-card-value">${evidence.quoteCount}</div>
       </div>
       <div class="evidence-card">
-        <div class="evidence-card-title">paragraph_count</div>
+        <div class="evidence-card-title">${renderHelpTitle("paragraph_count", "paragraph_count")}</div>
         <div class="evidence-card-value">${evidence.paragraphCount}</div>
       </div>
       <div class="evidence-card">
-        <div class="evidence-card-title">fact_strength</div>
+        <div class="evidence-card-title">${renderHelpTitle("fact_strength", "fact_strength")}</div>
         <div class="evidence-card-value">${evidence.label}</div>
       </div>
     </div>
@@ -1299,6 +1399,11 @@ function renderContext() {
     ${quotes}
     ${numbers}
   `;
+}
+
+function renderHelpTitle(label, helpKey) {
+  const help = escapeHtml(SCORE_HELP[helpKey] || "");
+  return `${escapeHtml(label)} <span class="help-pill" data-help="${help}">?</span>`;
 }
 
 function summarizeContextEvidence(context) {

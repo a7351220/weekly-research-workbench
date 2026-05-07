@@ -8,7 +8,7 @@ info:
     and returns structured JSON. \`/sources\` and \`/weekly\` are public unless the Worker has \`API_KEY\`
     configured, in which case callers must send \`Authorization: Bearer <API_KEY>\`.
 servers:
-  - url: https://weekly-rss-middleware.c7351220.workers.dev
+  - url: https://weekly-rss.zeabur.app
 components:
   securitySchemes:
     bearerAuth:

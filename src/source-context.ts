@@ -15,6 +15,9 @@ import {
 } from "./utils";
 
 const MAX_URLS = 5;
+const MAX_HTML_BYTES = 350_000;
+const MAX_HEAD_CHARS = 100_000;
+const MAX_BODY_CHARS = 160_000;
 
 export function parseSourceContextParams(url: URL): {
   urls: string[];
@@ -112,7 +115,7 @@ async function fetchArticleContext(
       };
     }
 
-    const html = await response.text();
+    const html = await readResponseSnippet(response, MAX_HTML_BYTES);
     const article = extractArticleFromHtml(html, normalizedUrl, sourceName, maxParagraphs);
     return article;
   } catch (error) {
@@ -185,13 +188,54 @@ async function tryFeedFallback(
   }
 }
 
+async function readResponseSnippet(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) {
+    const text = await response.text();
+    return text.slice(0, maxBytes);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let output = "";
+
+  try {
+    while (received < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      received += value.byteLength;
+      if (received <= maxBytes) {
+        output += decoder.decode(value, { stream: true });
+      } else {
+        const allowed = value.subarray(0, Math.max(0, value.byteLength - (received - maxBytes)));
+        if (allowed.byteLength > 0) {
+          output += decoder.decode(allowed, { stream: true });
+        }
+        break;
+      }
+    }
+    output += decoder.decode();
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // ignore cancellation errors
+    }
+  }
+
+  return output;
+}
+
 function extractArticleFromHtml(
   html: string,
   normalizedUrl: string,
   sourceName: string,
   maxParagraphs: number,
 ): SourceContextArticle {
-  const headHtml = html.slice(0, 140_000);
+  const truncatedHtml = html.slice(0, MAX_HTML_BYTES);
+  const headHtml = truncatedHtml.slice(0, MAX_HEAD_CHARS);
   const contentHtml = prepareHtmlForExtraction(html);
   const title =
     extractMetaContent(headHtml, "property", "og:title") ||
@@ -338,7 +382,8 @@ function extractTimeDatetime(html: string): string | null {
 }
 
 function prepareHtmlForExtraction(html: string): string {
-  const bodyMatch = html.match(/<body[\s\S]*<\/body>/i);
+  const truncated = html.slice(0, MAX_BODY_CHARS);
+  const bodyMatch = truncated.match(/<body[\s\S]*<\/body>/i);
   const base = bodyMatch ? bodyMatch[0] : html;
 
   return base
@@ -346,7 +391,7 @@ function prepareHtmlForExtraction(html: string): string {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
     .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, " ")
-    .slice(0, 220_000);
+    .slice(0, MAX_BODY_CHARS);
 }
 
 function extractParagraphs(html: string): string[] {

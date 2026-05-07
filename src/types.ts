@@ -9,7 +9,13 @@ export interface Env {
   BLOCKBEATS_API_KEY?: string;
   OPENNEWS_TOKEN?: string;
   TWITTER_TOKEN?: string;
-  EDITORIAL_CACHE?: KVNamespace;
+  EDITORIAL_CACHE?: CacheStore;
+}
+
+export interface CacheStore {
+  get(key: string, type: "json"): Promise<unknown | null>;
+  get(key: string, type?: "text"): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
 }
 
 export interface FeedSource {
