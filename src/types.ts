@@ -1,14 +1,13 @@
-export type Category =
-  | "crypto"
-  | "us_stocks_macro"
-  | "ai"
-  | "taiwan_stocks";
+export type Category = "us_stocks_macro" | "ai";
 
 export interface Env {
   API_KEY?: string;
   BLOCKBEATS_API_KEY?: string;
   OPENNEWS_TOKEN?: string;
   TWITTER_TOKEN?: string;
+  FMP_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_TRANSLATION_MODEL?: string;
   EDITORIAL_CACHE?: CacheStore;
 }
 
@@ -25,29 +24,12 @@ export interface FeedSource {
   enabledByDefault: boolean;
   priority: number;
   sourceType: "official" | "media" | "research";
-  fetchMode?: "rss" | "html" | "rss-big5" | "api-json";
-  parser?:
-    | "cnyes_tw_stock_html"
-    | "udn_tw_stock_html"
-    | "udn_jsonld_list"
-    | "tpex_press_json"
-    | "focus_taiwan_business_html"
-    | "taipei_times_biz_html"
-    | "trendforce_semiconductors_html"
-    | "rti_business_html";
   articleHosts?: string[];
 }
 
-export interface WeeklyQueryParams {
+export interface FeedQueryParams {
   days: number;
   limitPerSource: number;
-  includeTaiwan: boolean;
-  categories: Category[];
-  sources: string[] | null;
-  usePrivateSignals: boolean;
-  useBlockBeats: boolean;
-  useOpenNews: boolean;
-  useTwitterKols: boolean;
   keyword: string | null;
   maxItemsPerCategory: number;
 }
@@ -101,65 +83,6 @@ export interface FeedFetchResult {
   items: FeedItem[];
   failedFeed?: FailedFeed;
   source: FeedSource;
-}
-
-export interface WeeklyResponse {
-  ok: true;
-  generatedAt: string;
-  params: {
-    days: number;
-    limitPerSource: number;
-    includeTaiwan: boolean;
-    categories: Category[];
-    sources: string[] | null;
-    usePrivateSignals: boolean;
-    useBlockBeats: boolean;
-    useOpenNews: boolean;
-    useTwitterKols: boolean;
-    keyword: string | null;
-    maxItemsPerCategory: number;
-  };
-  summary: {
-    totalItems: number;
-    successfulFeeds: number;
-    failedFeeds: number;
-  };
-  categories: Record<Category, FeedItem[]>;
-  topicClusters: TopicCluster[];
-  narrativeBundles: NarrativeBundle[];
-  failedFeeds: FailedFeed[];
-}
-
-export interface SourceContextArticle {
-  url: string;
-  normalizedUrl: string;
-  source: string | null;
-  title: string;
-  publishedAt: string | null;
-  description: string;
-  leadText: string;
-  articleExcerpt: string;
-  keyParagraphs: string[];
-  quotedLines: string[];
-  numbersMentioned: string[];
-}
-
-export interface SourceContextFailure {
-  url: string;
-  normalizedUrl: string;
-  reason: string;
-  status: number | null;
-}
-
-export interface SourceContextResponse {
-  ok: true;
-  generatedAt: string;
-  params: {
-    urls: string[];
-    maxParagraphs: number;
-  };
-  articles: SourceContextArticle[];
-  failedArticles: SourceContextFailure[];
 }
 
 export interface TopicCluster {

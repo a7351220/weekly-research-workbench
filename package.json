@@ -1,5 +1,5 @@
 {
-  "name": "weekly-rss-middleware",
+  "name": "us-daily-market-report",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -14,9 +14,6 @@
     "deploy": "npm run deploy:worker",
     "deploy:worker": "npx -y node@22 ./node_modules/wrangler/bin/wrangler.js deploy",
     "deploy:worker:debug": "WRANGLER_LOG=debug WRANGLER_LOG_SANITIZE=false npx -y node@22 ./node_modules/wrangler/bin/wrangler.js deploy",
-    "deploy:pages": "cd workbench && npx -y node@22 ../node_modules/wrangler/bin/wrangler.js pages deploy . --project-name weekly-research-workbench --branch main",
-    "deploy:pages:debug": "cd workbench && WRANGLER_LOG=debug WRANGLER_LOG_SANITIZE=false npx -y node@22 ../node_modules/wrangler/bin/wrangler.js pages deploy . --project-name weekly-research-workbench --branch main",
-    "deploy:all": "npm run deploy:worker && npm run deploy:pages",
     "start": "node dist/node-server.js"
   },
   "dependencies": {

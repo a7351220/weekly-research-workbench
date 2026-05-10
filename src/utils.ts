@@ -1,5 +1,4 @@
-import { CATEGORY_ORDER } from "./sources";
-import type { Category, DateQuality, FeedItem, WeeklyQueryParams } from "./types";
+import type { DateQuality, FeedItem } from "./types";
 
 const TRACKING_QUERY_KEYS = [
   "utm_source",
@@ -89,78 +88,6 @@ export function parseNumber(
     result = Math.min(options.max, result);
   }
   return result;
-}
-
-export function parseCategories(
-  value: string | null,
-  includeTaiwan: boolean,
-): Category[] {
-  const allowed = new Set<Category>(
-    includeTaiwan ? CATEGORY_ORDER : CATEGORY_ORDER.filter((c) => c !== "taiwan_stocks"),
-  );
-
-  if (!value) {
-    return [...allowed];
-  }
-
-  const parsed = value
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .filter((part): part is Category => allowed.has(part as Category));
-
-  return parsed.length > 0 ? Array.from(new Set(parsed)) : [...allowed];
-}
-
-export function buildWeeklyParams(url: URL): WeeklyQueryParams {
-  const includeTaiwan = parseBoolean(url.searchParams.get("includeTaiwan"), false);
-  const categories = parseCategories(url.searchParams.get("categories"), includeTaiwan);
-  const sources = parseSourceNames(
-    url.searchParams.get("sources"),
-    url.searchParams.has("sources"),
-  );
-  const usePrivateSignals = parseBoolean(url.searchParams.get("usePrivateSignals"), true);
-  const useBlockBeats = parseBoolean(url.searchParams.get("useBlockBeats"), true);
-  const useOpenNews = parseBoolean(url.searchParams.get("useOpenNews"), true);
-  const useTwitterKols = parseBoolean(url.searchParams.get("useTwitterKols"), true);
-
-  return {
-    days: parseNumber(url.searchParams.get("days"), 7, { min: 1, max: 30 }),
-    limitPerSource: parseNumber(url.searchParams.get("limitPerSource"), 10, {
-      min: 1,
-      max: 50,
-    }),
-    includeTaiwan,
-    categories,
-    sources,
-    usePrivateSignals,
-    useBlockBeats,
-    useOpenNews,
-    useTwitterKols,
-    keyword: normalizeKeyword(url.searchParams.get("keyword")),
-    maxItemsPerCategory: parseNumber(
-      url.searchParams.get("maxItemsPerCategory"),
-      30,
-      { min: 1, max: 100 },
-    ),
-  };
-}
-
-export function parseSourceNames(value: string | null, present = false): string[] | null {
-  if (!present) {
-    return null;
-  }
-
-  if (value === null || value.trim() === "") {
-    return [];
-  }
-
-  const parsed = value
-    .split(",")
-    .map((part) => decodeURIComponent(part).trim())
-    .filter(Boolean);
-
-  return parsed.length > 0 ? Array.from(new Set(parsed)) : null;
 }
 
 export function normalizeKeyword(value: string | null): string | null {

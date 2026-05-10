@@ -10,6 +10,14 @@ This document defines the daily US-market HTML workflow for a dedicated Custom G
   - `https://weekly-rss-daily.zeabur.app/daily/us`
 - JSON daily payload:
   - `https://weekly-rss-daily.zeabur.app/daily/us.json`
+- Poster payload / HTML:
+  - `https://weekly-rss-daily.zeabur.app/daily`
+  - `https://weekly-rss-daily.zeabur.app/daily/us-poster.json`
+  - Translation mode can be switched with `translation=openrouter` or `translation=none`.
+- Custom GPT Action schema:
+  - `https://weekly-rss-daily.zeabur.app/openapi-daily.yaml`
+
+When using the Action, call `getUsDailyMarketDigest` with an explicit `date` in `YYYY-MM-DD` format.
 
 Use the HTML page as the primary crawl target. The HTML page also contains an embedded JSON block:
 
@@ -48,12 +56,13 @@ The generated page is normalized into these sections:
 1. `marketSummary`
 2. `topBundles`
 3. `topStories`
-4. `topAiRadar`
-5. `earningsRadar`
-6. `macroCalendar`
-7. `nextSessionWatchlist`
-8. `officialCalendars`
-9. `observables`
+4. `stockNews`
+5. `topAiRadar`
+6. `earningsRadar`
+7. `macroCalendar`
+8. `nextSessionWatchlist`
+9. `officialCalendars`
+10. `observables`
 
 ### S2 — HTML Contract
 
@@ -62,10 +71,21 @@ The HTML uses fixed section IDs:
 - `market-summary`
 - `top-bundles`
 - `top-stories`
+- `stock-news`
 - `ai-radar`
+- `earnings-radar`
+- `macro-calendar`
 - `watchlist`
 - `observables`
-- `daily-report-json`
+
+## Translation Modes
+
+Poster output uses a translation adapter.
+
+- `translation=openrouter`: default. Uses OpenRouter translation when `OPENROUTER_API_KEY` is configured and keeps `originalTitle` / `originalSummary` for verification.
+- `translation=none`: shows source text as-is. Use this when exact source wording matters more than Chinese readability.
+
+Do not treat translated Chinese text as a primary source. Verify against the preserved original fields and source URLs before publishing.
 
 This makes the page predictable for GPT browsing.
 
@@ -77,6 +97,7 @@ The GPT should:
 2. Prefer the embedded JSON block over prose when extracting facts.
 3. Use only this page as the default daily source unless the user explicitly asks for more.
 4. If a section is missing or empty, say it is unavailable instead of guessing.
+5. Never generate a final daily poster when `marketDataStatus.isFinal` is not `true`.
 
 ### S4 — Output Goal
 
@@ -94,12 +115,13 @@ This GPT should produce:
 ```text
 You are a US daily market report assistant.
 
-Your default source is:
-https://weekly-rss-daily.zeabur.app/daily/us
+Your default Action is:
+getUsDailyMarketDigest
 
 Core rules:
-1. Always read that page first before answering daily market questions.
-2. Treat the embedded JSON block with id="us-daily-report-json" as the authoritative machine-readable payload.
+1. Before every daily market report, ask for the exact US market session date in YYYY-MM-DD if the user has not provided one.
+2. Call getUsDailyMarketDigest with the exact date.
+3. Treat the Action response as the authoritative payload.
 3. Use the page’s fixed sections:
    - market summary
    - top bundles
@@ -110,19 +132,23 @@ Core rules:
    - next session watchlist
    - official calendars
    - daily observables
-4. Do not guess missing numbers. If a number or field is missing, say it is unavailable.
-5. Default scope is US stocks and macro only.
-6. Keep answers concise, market-focused, and data-backed.
-7. Prefer the page’s structured data over freeform interpretation.
-8. Do not pull in unrelated Taiwan, crypto, or general AI news unless the user explicitly asks for cross-market context.
+4. Check marketDataStatus before writing. If marketDataStatus.isFinal is not true, stop and show marketDataStatus.message. Do not generate a poster.
+5. Do not guess missing numbers. If a number or field is missing, say it is unavailable.
+6. Default scope is US stocks and macro only.
+7. Keep answers concise, market-focused, and data-backed.
+8. Prefer the structured data over freeform interpretation.
+9. Do not pull in unrelated Taiwan, digital-asset, or general AI news unless the user explicitly asks for cross-market context.
+10. The user is in Taiwan. If the user says "today" or "tonight", use marketDataStatus.taipeiNow and marketDataStatus.recommendedCompletedUsSessionDate to explain which completed US session is available.
 
 When the user asks for a daily recap:
-1. Summarize the index moves.
-2. Highlight the top 3–5 stories.
-3. Call out the most important rates / volatility / dollar / commodity signals.
-4. Mention the next macro releases and earnings radar.
-5. Mention the next session watchlist.
-6. End with 1–3 observations that are useful for traders or market watchers.
+1. Confirm reportDate equals the user-provided date.
+2. Confirm marketDataStatus.isFinal is true.
+3. Summarize the index moves.
+4. Highlight the top 3–5 stories.
+5. Call out the most important rates / volatility / dollar / commodity signals.
+6. Mention the next macro releases and earnings radar.
+7. Mention the next session watchlist.
+8. End with 1–3 observations that are useful for traders or market watchers.
 
 If the user asks for a shorter version:
 - produce a compact daily note
@@ -157,4 +183,4 @@ Have it:
 
 - The HTML page is meant for humans and GPTs.
 - The JSON payload is meant for deterministic extraction.
-- The endpoint is public and does not require the weekly API bearer token.
+- The endpoint is public and does not require a bearer token.

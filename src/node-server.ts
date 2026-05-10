@@ -12,6 +12,9 @@ const env: Env = {
   BLOCKBEATS_API_KEY: process.env.BLOCKBEATS_API_KEY,
   OPENNEWS_TOKEN: process.env.OPENNEWS_TOKEN,
   TWITTER_TOKEN: process.env.TWITTER_TOKEN,
+  FMP_API_KEY: process.env.FMP_API_KEY,
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  OPENROUTER_TRANSLATION_MODEL: process.env.OPENROUTER_TRANSLATION_MODEL,
   EDITORIAL_CACHE: cache,
 };
 
@@ -44,6 +47,6 @@ serve(
     port,
   },
   (info) => {
-    console.log(`weekly-rss-middleware node server listening on http://localhost:${info.port}`);
+    console.log(`us-daily-market-report node server listening on http://localhost:${info.port}`);
   },
 );

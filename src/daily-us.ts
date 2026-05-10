@@ -1,9 +1,9 @@
-import { buildNarrativeBundles, buildTopicClusters, enrichWithEditorialSignals, sortItemsForWeekly } from "./editorial";
+import { buildNarrativeBundles, buildTopicClusters, enrichWithEditorialSignals, sortDailyItems } from "./editorial";
 import { fetchFeed } from "./rss";
 import { filterEditorialCachePayload, loadEditorialCache, refreshEditorialCache } from "./signals";
 import { SOURCES } from "./sources";
-import type { Category, EditorialCachePayload, Env, FeedItem, FeedSource, WeeklyQueryParams } from "./types";
-import { jsonResponse, normalizeUrl } from "./utils";
+import type { Category, EditorialCachePayload, Env, FeedItem, FeedQueryParams, FeedSource } from "./types";
+import { cleanDescription, computeReportSignals, createStableId, jsonResponse, normalizeUrl, parseDate } from "./utils";
 
 type QuoteKind = "index" | "asset" | "stock";
 
@@ -11,8 +11,26 @@ interface QuoteConfig {
   key: string;
   label: string;
   symbol: string;
+  yahooSymbol: string;
+  fmpSymbol: string | null;
   kind: QuoteKind;
   sourceUrl: string;
+}
+
+interface PricePoint {
+  date: string;
+  close: number;
+}
+
+interface FmpStockNewsRow {
+  symbol?: string;
+  publishedDate?: string;
+  date?: string;
+  title?: string;
+  text?: string;
+  site?: string;
+  publisher?: string;
+  url?: string;
 }
 
 interface QuoteSnapshot {
@@ -26,6 +44,8 @@ interface QuoteSnapshot {
   changePct: number | null;
   asOf: string | null;
   sourceUrl: string;
+  dataProvider: string | null;
+  history: PricePoint[];
 }
 
 interface DailyUsJsonPayload {
@@ -33,6 +53,15 @@ interface DailyUsJsonPayload {
   reportType: "us_daily_market_digest";
   generatedAt: string;
   reportDate: string;
+  marketDataStatus: {
+    requestedDate: string;
+    newYorkNow: string;
+    taipeiNow: string;
+    recommendedCompletedUsSessionDate: string;
+    isFinal: boolean;
+    status: "final" | "not_final" | "future_date" | "quote_unavailable";
+    message: string;
+  };
   sourceUrl: string;
   marketSummary: {
     indices: QuoteSnapshot[];
@@ -40,6 +69,7 @@ interface DailyUsJsonPayload {
     megaCaps: QuoteSnapshot[];
   };
   topStories: FeedItem[];
+  stockNews: FeedItem[];
   topAiRadar: FeedItem[];
   earningsRadar: FeedItem[];
   topClusters: ReturnType<typeof buildTopicClusters>;
@@ -51,31 +81,33 @@ interface DailyUsJsonPayload {
   failedFeeds: Array<{ source: string; reason: string; status: number | null }>;
 }
 
+export type DailyUsPayload = DailyUsJsonPayload;
+
 const INDEX_QUOTES: QuoteConfig[] = [
-  { key: "spx", label: "S&P 500", symbol: ".SPX", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.SPX" },
-  { key: "ndx", label: "Nasdaq Composite", symbol: ".IXIC", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.IXIC" },
-  { key: "dji", label: "Dow Jones", symbol: ".DJI", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.DJI" },
-  { key: "rut", label: "Russell 2000", symbol: ".RUT", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.RUT" },
-  { key: "sox", label: "PHLX SOX", symbol: ".SOX", kind: "index", sourceUrl: "https://www.cnbc.com/quotes/.SOX" },
+  { key: "spx", label: "S&P 500", symbol: ".SPX", yahooSymbol: "^GSPC", fmpSymbol: "^GSPC", kind: "index", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-index-price-api" },
+  { key: "ndx", label: "Nasdaq Composite", symbol: ".IXIC", yahooSymbol: "^IXIC", fmpSymbol: "^IXIC", kind: "index", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-index-price-api" },
+  { key: "dji", label: "Dow Jones", symbol: ".DJI", yahooSymbol: "^DJI", fmpSymbol: "^DJI", kind: "index", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-index-price-api" },
+  { key: "rut", label: "Russell 2000", symbol: ".RUT", yahooSymbol: "^RUT", fmpSymbol: "^RUT", kind: "index", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-index-price-api" },
+  { key: "sox", label: "PHLX SOX", symbol: ".SOX", yahooSymbol: "^SOX", fmpSymbol: null, kind: "index", sourceUrl: "https://finance.yahoo.com/quote/%5ESOX/history" },
 ];
 
 const ASSET_QUOTES: QuoteConfig[] = [
-  { key: "vix", label: "VIX", symbol: ".VIX", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/.VIX" },
-  { key: "dxy", label: "DXY", symbol: ".DXY", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/.DXY" },
-  { key: "us10y", label: "US 10Y", symbol: ".TNX", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/.TNX" },
-  { key: "wti", label: "WTI", symbol: "@CL.1", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/@CL.1" },
-  { key: "gold", label: "Gold", symbol: "@GC.1", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/@GC.1" },
-  { key: "btc", label: "BTC", symbol: "BTC.CM=", kind: "asset", sourceUrl: "https://www.cnbc.com/quotes/BTC.CM=" },
+  { key: "vix", label: "VIX", symbol: ".VIX", yahooSymbol: "^VIX", fmpSymbol: "^VIX", kind: "asset", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-index-price-api" },
+  { key: "dxy", label: "DXY", symbol: ".DXY", yahooSymbol: "DX-Y.NYB", fmpSymbol: null, kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/DX-Y.NYB/history" },
+  { key: "us10y", label: "US 10Y", symbol: ".TNX", yahooSymbol: "^TNX", fmpSymbol: null, kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/%5ETNX/history" },
+  { key: "wti", label: "WTI", symbol: "@CL.1", yahooSymbol: "CL=F", fmpSymbol: null, kind: "asset", sourceUrl: "https://finance.yahoo.com/quote/CL%3DF/history" },
+  { key: "gold", label: "Gold", symbol: "@GC.1", yahooSymbol: "GC=F", fmpSymbol: "GCUSD", kind: "asset", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-commodity-prices-api" },
+  { key: "btc", label: "BTC", symbol: "BTC.CM=", yahooSymbol: "BTC-USD", fmpSymbol: "BTCUSD", kind: "asset", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-cryptocurrency-prices-api" },
 ];
 
 const MEGACAP_QUOTES: QuoteConfig[] = [
-  { key: "aapl", label: "Apple", symbol: "AAPL", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/AAPL" },
-  { key: "msft", label: "Microsoft", symbol: "MSFT", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/MSFT" },
-  { key: "nvda", label: "NVIDIA", symbol: "NVDA", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/NVDA" },
-  { key: "amzn", label: "Amazon", symbol: "AMZN", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/AMZN" },
-  { key: "googl", label: "Alphabet", symbol: "GOOGL", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/GOOGL" },
-  { key: "meta", label: "Meta", symbol: "META", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/META" },
-  { key: "tsla", label: "Tesla", symbol: "TSLA", kind: "stock", sourceUrl: "https://www.cnbc.com/quotes/TSLA" },
+  { key: "aapl", label: "Apple", symbol: "AAPL", yahooSymbol: "AAPL", fmpSymbol: "AAPL", kind: "stock", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-stock-data-free-api" },
+  { key: "msft", label: "Microsoft", symbol: "MSFT", yahooSymbol: "MSFT", fmpSymbol: "MSFT", kind: "stock", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-stock-data-free-api" },
+  { key: "nvda", label: "NVIDIA", symbol: "NVDA", yahooSymbol: "NVDA", fmpSymbol: "NVDA", kind: "stock", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-stock-data-free-api" },
+  { key: "amzn", label: "Amazon", symbol: "AMZN", yahooSymbol: "AMZN", fmpSymbol: "AMZN", kind: "stock", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-stock-data-free-api" },
+  { key: "googl", label: "Alphabet", symbol: "GOOGL", yahooSymbol: "GOOGL", fmpSymbol: "GOOGL", kind: "stock", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-stock-data-free-api" },
+  { key: "meta", label: "Meta", symbol: "META", yahooSymbol: "META", fmpSymbol: "META", kind: "stock", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-stock-data-free-api" },
+  { key: "tsla", label: "Tesla", symbol: "TSLA", yahooSymbol: "TSLA", fmpSymbol: "TSLA", kind: "stock", sourceUrl: "https://site.financialmodelingprep.com/developer/docs/historical-stock-data-free-api" },
 ];
 
 const OFFICIAL_CALENDARS = [
@@ -113,7 +145,18 @@ const NASDAQ_EARNINGS_SOURCE: FeedSource = {
 
 export async function handleDailyUs(request: Request, env: Env): Promise<Response> {
   const requestUrl = new URL(request.url);
-  const payload = await buildDailyUsPayload(requestUrl, env, request);
+  const reportDate = resolveReportDate(requestUrl);
+  if (!reportDate) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Invalid date",
+        message: "date must use YYYY-MM-DD format.",
+      },
+      { status: 400 },
+    );
+  }
+  const payload = await buildDailyUsPayload(requestUrl, env, reportDate, request);
   if (requestUrl.pathname.endsWith(".json")) {
     return jsonResponse(payload);
   }
@@ -128,17 +171,28 @@ export async function handleDailyUs(request: Request, env: Env): Promise<Respons
   });
 }
 
-async function buildDailyUsPayload(requestUrl: URL, env: Env, request?: Request): Promise<DailyUsJsonPayload> {
+export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate: string, request?: Request): Promise<DailyUsJsonPayload> {
+  const cacheKey = `daily-us:v9:${reportDate}`;
+  const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
+  if (isDailyUsPayload(cached)) {
+    return {
+      ...cached,
+      sourceUrl: buildDailySourceUrl(requestUrl, request, reportDate),
+    };
+  }
+
   const editorialCache = await loadDailyEditorialCache(env);
-  const [usNews, aiNews, earningsNews, macroCalendar, indices, assets, megaCaps] = await Promise.all([
-    fetchNewsCategory("us_stocks_macro", env, editorialCache, { days: 2, limitPerSource: 8, maxItems: 24 }),
+  const marketDataStatus = getMarketDataStatus(reportDate);
+  const [usNews, aiNews, earningsNews, macroCalendar, datedStockNews] = await Promise.all([
+    fetchNewsCategory("us_stocks_macro", env, editorialCache, { days: 2, limitPerSource: 20, maxItems: 60 }),
     fetchNewsCategory("ai", env, editorialCache, { days: 3, limitPerSource: 6, maxItems: 12 }),
     fetchSpecificSources([NASDAQ_EARNINGS_SOURCE], editorialCache, { days: 5, limitPerSource: 6, maxItems: 8 }),
     fetchBeaMacroCalendar(),
-    fetchQuoteSet(INDEX_QUOTES),
-    fetchQuoteSet(ASSET_QUOTES),
-    fetchQuoteSet(MEGACAP_QUOTES),
+    fetchDatedStockNews(reportDate, env, editorialCache),
   ]);
+  const [indices, assets, megaCaps] = marketDataStatus.isFinal
+    ? await fetchDailyQuoteGroups(reportDate, env)
+    : [INDEX_QUOTES.map(emptyQuote), ASSET_QUOTES.map(emptyQuote), MEGACAP_QUOTES.map(emptyQuote)];
 
   const filteredAi = aiNews.items
     .filter((item) => isUsAiRadar(item))
@@ -146,25 +200,29 @@ async function buildDailyUsPayload(requestUrl: URL, env: Env, request?: Request)
   const earningsRadar = earningsNews.items
     .filter((item) => /\b(earnings|results|guidance|quarter|revenue|eps|after hours|before market)\b/i.test(`${item.title} ${item.description}`))
     .slice(0, 5);
+  const stockNews = buildStockNews(datedStockNews.items, usNews.items, filteredAi, earningsRadar, reportDate);
 
-  const combinedForGrouping = sortItemsForWeekly([...usNews.items, ...filteredAi, ...earningsRadar]).slice(0, 24);
+  const combinedForGrouping = sortDailyItems([...usNews.items, ...filteredAi, ...earningsRadar]).slice(0, 24);
   const topClusters = buildTopicClusters(combinedForGrouping).slice(0, 6);
   const topBundles = buildNarrativeBundles(topClusters).slice(0, 4);
   const nextSessionWatchlist = buildNextSessionWatchlist(usNews.items, filteredAi, earningsRadar, macroCalendar, indices, assets, megaCaps);
   const observables = buildObservables(indices, assets, megaCaps, usNews.items);
+  const finalMarketDataStatus = validateQuoteCompleteness(marketDataStatus, indices);
 
-  return {
+  const payload: DailyUsJsonPayload = {
     ok: true,
     reportType: "us_daily_market_digest",
     generatedAt: new Date().toISOString(),
-    reportDate: getNewYorkDateString(),
-    sourceUrl: `${resolvePublicOrigin(requestUrl, request)}/daily/us`,
+    reportDate,
+    marketDataStatus: finalMarketDataStatus,
+    sourceUrl: buildDailySourceUrl(requestUrl, request, reportDate),
     marketSummary: {
       indices,
       assets,
       megaCaps,
     },
-    topStories: usNews.items.slice(0, 6),
+    topStories: usNews.items.slice(0, 60),
+    stockNews,
     topAiRadar: filteredAi,
     earningsRadar,
     topClusters,
@@ -173,8 +231,22 @@ async function buildDailyUsPayload(requestUrl: URL, env: Env, request?: Request)
     nextSessionWatchlist,
     officialCalendars: OFFICIAL_CALENDARS,
     observables,
-    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds, ...earningsNews.failedFeeds],
+    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds, ...earningsNews.failedFeeds, ...datedStockNews.failedFeeds],
   };
+
+  const cacheTtl = finalMarketDataStatus.status === "quote_unavailable" ? 60 : 6 * 60 * 60;
+  await env.EDITORIAL_CACHE?.put(cacheKey, JSON.stringify(payload), { expirationTtl: cacheTtl });
+  return payload;
+}
+
+function isDailyUsPayload(value: unknown): value is DailyUsJsonPayload {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && (value as { ok?: unknown }).ok === true
+    && (value as { reportType?: unknown }).reportType === "us_daily_market_digest"
+    && Array.isArray((value as { stockNews?: unknown }).stockNews),
+  );
 }
 
 function resolvePublicOrigin(requestUrl: URL, request?: Request): string {
@@ -187,6 +259,94 @@ function resolvePublicOrigin(requestUrl: URL, request?: Request): string {
     return `${forwardedProto}://${forwardedHost}`;
   }
   return requestUrl.origin;
+}
+
+function resolveReportDate(requestUrl: URL): string | null {
+  const date = requestUrl.searchParams.get("date");
+  if (!date) {
+    return getNewYorkDateString();
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return null;
+  }
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().slice(0, 10) === date ? date : null;
+}
+
+function buildDailySourceUrl(requestUrl: URL, request: Request | undefined, reportDate: string): string {
+  const url = new URL(`${resolvePublicOrigin(requestUrl, request)}/daily/us`);
+  if (requestUrl.searchParams.has("date")) {
+    url.searchParams.set("date", reportDate);
+  }
+  return url.toString();
+}
+
+function getMarketDataStatus(reportDate: string): DailyUsJsonPayload["marketDataStatus"] {
+  const newYork = getNewYorkClockParts();
+  const taipei = getTimeZoneClockParts("Asia/Taipei");
+  const newYorkNow = `${newYork.date} ${newYork.time} America/New_York`;
+  const taipeiNow = `${taipei.date} ${taipei.time} Asia/Taipei`;
+  const recommendedCompletedUsSessionDate = getRecommendedCompletedUsSessionDate(newYork);
+
+  if (reportDate > newYork.date) {
+    return {
+      requestedDate: reportDate,
+      newYorkNow,
+      taipeiNow,
+      recommendedCompletedUsSessionDate,
+      isFinal: false,
+      status: "future_date",
+      message: `Requested date is later than the current New York date. Market data is not available yet. For Taiwan users, the latest completed US session is ${recommendedCompletedUsSessionDate}.`,
+    };
+  }
+
+  if (reportDate === newYork.date && newYork.minutesSinceMidnight < 17 * 60 + 30) {
+    return {
+      requestedDate: reportDate,
+      newYorkNow,
+      taipeiNow,
+      recommendedCompletedUsSessionDate,
+      isFinal: false,
+      status: "not_final",
+      message: `US market close data is not final yet. Taiwan time is ${taipeiNow}; the latest completed US session is ${recommendedCompletedUsSessionDate}. Quotes are intentionally returned as N/A to avoid using intraday numbers.`,
+    };
+  }
+
+  return {
+    requestedDate: reportDate,
+    newYorkNow,
+    taipeiNow,
+    recommendedCompletedUsSessionDate,
+    isFinal: true,
+    status: "final",
+    message: "Historical close data is final enough for the daily digest.",
+  };
+}
+
+function validateQuoteCompleteness(
+  status: DailyUsJsonPayload["marketDataStatus"],
+  indices: QuoteSnapshot[],
+): DailyUsJsonPayload["marketDataStatus"] {
+  if (!status.isFinal) {
+    return status;
+  }
+  const requiredKeys = new Set(["spx", "ndx", "dji"]);
+  const missing = indices
+    .filter((quote) => requiredKeys.has(quote.key))
+    .filter((quote) => quote.price === null || quote.previousClose === null || quote.changePct === null || quote.asOf !== status.requestedDate)
+    .map((quote) => quote.label);
+  if (missing.length === 0) {
+    return status;
+  }
+  return {
+    ...status,
+    isFinal: false,
+    status: "quote_unavailable",
+    message: `Required historical close data is unavailable for: ${missing.join(", ")}. Do not generate a poster with market numbers. For Taiwan users, the latest completed US session is ${status.recommendedCompletedUsSessionDate}.`,
+  };
 }
 
 async function loadDailyEditorialCache(env: Env): Promise<EditorialCachePayload | null> {
@@ -208,16 +368,9 @@ async function fetchNewsCategory(
   editorialCache: EditorialCachePayload | null,
   options: { days: number; limitPerSource: number; maxItems: number },
 ): Promise<{ items: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
-  const params: WeeklyQueryParams = {
+  const params: FeedQueryParams = {
     days: options.days,
     limitPerSource: options.limitPerSource,
-    includeTaiwan: false,
-    categories: [category],
-    sources: null,
-    usePrivateSignals: true,
-    useBlockBeats: true,
-    useOpenNews: true,
-    useTwitterKols: true,
     keyword: null,
     maxItemsPerCategory: options.maxItems,
   };
@@ -245,7 +398,7 @@ async function fetchNewsCategory(
   }
 
   return {
-    items: sortItemsForWeekly(items).slice(0, options.maxItems),
+    items: sortDailyItems(items).slice(0, options.maxItems),
     failedFeeds,
   };
 }
@@ -255,16 +408,9 @@ async function fetchSpecificSources(
   editorialCache: EditorialCachePayload | null,
   options: { days: number; limitPerSource: number; maxItems: number },
 ): Promise<{ items: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
-  const params: WeeklyQueryParams = {
+  const params: FeedQueryParams = {
     days: options.days,
     limitPerSource: options.limitPerSource,
-    includeTaiwan: false,
-    categories: ["us_stocks_macro"],
-    sources: null,
-    usePrivateSignals: true,
-    useBlockBeats: true,
-    useOpenNews: true,
-    useTwitterKols: true,
     keyword: null,
     maxItemsPerCategory: options.maxItems,
   };
@@ -287,7 +433,210 @@ async function fetchSpecificSources(
       items.push(enrichWithEditorialSignals(item, editorialCache?.topics ?? []));
     }
   }
-  return { items: sortItemsForWeekly(items).slice(0, options.maxItems), failedFeeds };
+  return { items: sortDailyItems(items).slice(0, options.maxItems), failedFeeds };
+}
+
+async function fetchDatedStockNews(
+  reportDate: string,
+  env: Env,
+  editorialCache: EditorialCachePayload | null,
+): Promise<{ items: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
+  if (!env.FMP_API_KEY) {
+    return { items: [], failedFeeds: [] };
+  }
+
+  const symbols = STOCK_NEWS_PATTERNS.map(([symbol]) => symbol).join(",");
+  const toDate = addUtcDays(reportDate, 1);
+  const urls = [
+    `https://financialmodelingprep.com/stable/news/stock?symbols=${encodeURIComponent(symbols)}&from=${reportDate}&to=${toDate}&limit=100&apikey=${encodeURIComponent(env.FMP_API_KEY)}`,
+    `https://financialmodelingprep.com/api/v3/stock_news?tickers=${encodeURIComponent(symbols)}&from=${reportDate}&to=${toDate}&limit=100&apikey=${encodeURIComponent(env.FMP_API_KEY)}`,
+  ];
+
+  const failedFeeds: Array<{ source: string; reason: string; status: number | null }> = [];
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "user-agent": "us-daily-market-report/1.0",
+          accept: "application/json,text/plain,*/*",
+        },
+      });
+      if (!response.ok) {
+        failedFeeds.push({ source: "Financial Modeling Prep Stock News", reason: "Fetch failed or non-200 response", status: response.status });
+        continue;
+      }
+      const payload = await response.json() as FmpStockNewsRow[] | { Error?: string };
+      if (!Array.isArray(payload)) {
+        failedFeeds.push({ source: "Financial Modeling Prep Stock News", reason: "Unexpected stock news payload", status: null });
+        continue;
+      }
+      const items = await Promise.all(payload.map((row) => transformFmpStockNews(row)));
+      return {
+        items: sortDailyItems(
+          items
+            .filter((item): item is FeedItem => item !== null)
+            .map((item) => enrichWithEditorialSignals(item, editorialCache?.topics ?? [])),
+        ),
+        failedFeeds: [],
+      };
+    } catch (error) {
+      failedFeeds.push({
+        source: "Financial Modeling Prep Stock News",
+        reason: error instanceof Error ? error.message : "Unknown stock news error",
+        status: null,
+      });
+    }
+  }
+
+  return { items: [], failedFeeds };
+}
+
+async function transformFmpStockNews(row: FmpStockNewsRow): Promise<FeedItem | null> {
+  const title = cleanDescription(row.title ?? "", 300);
+  const url = normalizeUrl(row.url ?? "");
+  if (!title || !url) return null;
+
+  const description = cleanDescription(row.text ?? row.title ?? "", 500);
+  const publishedAt = parseFmpPublishedAt(row.publishedDate ?? row.date ?? null);
+  const source = row.site || row.publisher || `FMP ${row.symbol ?? "Stock News"}`;
+  const report = computeReportSignals(title, description, "media");
+
+  return {
+    id: await createStableId(source, url),
+    source,
+    category: "us_stocks_macro",
+    sourceType: "media",
+    sourcePriority: 78,
+    title,
+    url,
+    publishedAt: publishedAt.publishedAt,
+    description,
+    rawDescription: row.text ?? null,
+    matchedKeywords: [],
+    ageHours: publishedAt.ageHours,
+    dateQuality: publishedAt.dateQuality,
+    reportScore: report.score,
+    reportSignals: report.signals,
+    evidenceScore: 0,
+    substantiationScore: 0,
+    storyValueScore: 0,
+    penaltyScore: 0,
+    sourceQualityScore: 0,
+    corroborationScore: 0,
+    marketReactionScore: 0,
+    editorialScore: 0,
+    editorialSignals: [],
+    topicTags: [],
+    topicEntities: [],
+    crossSourceCount: 0,
+    socialProof: 0,
+    eventType: null,
+    majorEntity: null,
+    marketTheme: null,
+    clusterKey: "",
+  };
+}
+
+function parseFmpPublishedAt(value: string | null): ReturnType<typeof parseDate> {
+  if (!value) return parseDate(null);
+  const trimmed = value.trim();
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+    return parseDate(trimmed);
+  }
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+  if (!match) return parseDate(trimmed);
+  const [, date, time] = match;
+  const offset = isNewYorkDstDate(date) ? "-04:00" : "-05:00";
+  return parseDate(`${date}T${time}${offset}`);
+}
+
+const STOCK_NEWS_PATTERNS: Array<[string, RegExp]> = [
+  ["AAPL", /\b(apple|aapl)\b/i],
+  ["MSFT", /\b(microsoft|msft)\b/i],
+  ["NVDA", /\b(nvidia|nvda)\b/i],
+  ["AMZN", /\b(amazon|amzn)\b/i],
+  ["GOOGL", /\b(alphabet|google|googl|goog)\b/i],
+  ["META", /\b(meta|facebook)\b/i],
+  ["TSLA", /\b(tesla|tsla)\b/i],
+  ["AMD", /\b(amd|advanced micro devices)\b/i],
+  ["DELL", /\b(dell)\b/i],
+  ["SMCI", /\b(super micro|supermicro|smci)\b/i],
+  ["INTC", /\b(intel|intc)\b/i],
+];
+
+function buildStockNews(
+  datedStockNews: FeedItem[],
+  topStories: FeedItem[],
+  aiRadar: FeedItem[],
+  earningsRadar: FeedItem[],
+  reportDate: string,
+): FeedItem[] {
+  const dedupe = new Set<string>();
+  const candidates = [...datedStockNews, ...topStories, ...aiRadar, ...earningsRadar]
+    .filter((item) => isIndividualStockNews(item, reportDate))
+    .filter((item) => {
+      const key = normalizeUrl(item.url);
+      if (dedupe.has(key)) return false;
+      dedupe.add(key);
+      return true;
+    })
+    .sort((a, b) => stockNewsScore(b) - stockNewsScore(a));
+
+  return candidates.slice(0, 8);
+}
+
+function isIndividualStockNews(item: FeedItem, reportDate: string): boolean {
+  const text = `${item.title} ${item.description}`;
+  if (!isReportSessionItem(item, reportDate)) {
+    return false;
+  }
+  if (/\b(pre-market earnings report|after-hours earnings report|earnings report for may|most active|daily dividend report)\b/i.test(text)) {
+    return false;
+  }
+  if (/\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger)\b/i.test(text)) {
+    return false;
+  }
+  if (/\b(s&p 500|nasdaq 100|dow jones|major indexes|stock market today)\b/i.test(text) && !STOCK_NEWS_PATTERNS.some(([, pattern]) => pattern.test(text))) {
+    return false;
+  }
+  const hasCompany = STOCK_NEWS_PATTERNS.some(([, pattern]) => pattern.test(text));
+  const hasConcreteCatalyst = /\b(earnings|results|guidance|revenue|eps|profit|margin|surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|price target|upgrade|downgrade|deal|partnership|contract|acquisition|investigation|lawsuit|white house|trump|tariff|ai server|data center|gpu|chip|semiconductor|cloud|capex|inference)\b/i.test(text);
+  return hasCompany && hasConcreteCatalyst;
+}
+
+function stockNewsScore(item: FeedItem): number {
+  const text = `${item.title} ${item.description}`;
+  let score = item.editorialScore + item.marketReactionScore * 0.35 + item.storyValueScore * 0.25 + item.sourcePriority * 0.15;
+  if (/\b(earnings|results|guidance|revenue|eps|profit|margin)\b/i.test(text)) score += 24;
+  if (/\b(surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|%\b)\b/i.test(text)) score += 18;
+  if (/\b(ai|data center|server|gpu|chip|semiconductor|cloud|inference)\b/i.test(text)) score += 12;
+  if (item.publishedAt) score += 8;
+  return score;
+}
+
+function isReportSessionItem(item: FeedItem, reportDate: string): boolean {
+  if (!item.publishedAt) return false;
+  const publishedMs = Date.parse(item.publishedAt);
+  if (!Number.isFinite(publishedMs)) return false;
+  const parts = getZonedDateParts(new Date(publishedMs), "America/New_York");
+  if (parts.date === reportDate) return true;
+  return parts.date === addUtcDays(reportDate, 1) && parts.minutesSinceMidnight <= 3 * 60;
+}
+
+function isNewYorkDstDate(date: string): boolean {
+  const year = Number(date.slice(0, 4));
+  if (!Number.isFinite(year)) return true;
+  const start = nthWeekdayOfMonthUtc(year, 2, 0, 2);
+  const end = nthWeekdayOfMonthUtc(year, 10, 0, 1);
+  const current = Date.parse(`${date}T12:00:00Z`);
+  return current >= start && current < end;
+}
+
+function nthWeekdayOfMonthUtc(year: number, monthIndex: number, weekday: number, nth: number): number {
+  const first = new Date(Date.UTC(year, monthIndex, 1, 12));
+  const offset = (weekday - first.getUTCDay() + 7) % 7;
+  const day = 1 + offset + (nth - 1) * 7;
+  return Date.UTC(year, monthIndex, day, 12);
 }
 
 async function fetchBeaMacroCalendar(): Promise<Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>> {
@@ -295,7 +644,7 @@ async function fetchBeaMacroCalendar(): Promise<Array<{ dateLabel: string; timeL
   try {
     const response = await fetch(url, {
       headers: {
-        "user-agent": "weekly-rss-middleware/1.0",
+        "user-agent": "us-daily-market-report/1.0",
         accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
     });
@@ -327,8 +676,137 @@ async function fetchBeaMacroCalendar(): Promise<Array<{ dateLabel: string; timeL
   }
 }
 
-async function fetchQuoteSet(configs: QuoteConfig[]): Promise<QuoteSnapshot[]> {
-  return Promise.all(configs.map(fetchQuoteSnapshot));
+async function fetchQuoteSet(configs: QuoteConfig[], reportDate: string, env: Env): Promise<QuoteSnapshot[]> {
+  const quotes: QuoteSnapshot[] = [];
+  for (const config of configs) {
+    quotes.push(await fetchHistoricalQuoteSnapshot(config, reportDate, env));
+    await delay(250);
+  }
+  return quotes;
+}
+
+async function fetchDailyQuoteGroups(reportDate: string, env: Env): Promise<[QuoteSnapshot[], QuoteSnapshot[], QuoteSnapshot[]]> {
+  const indices = await fetchQuoteSet(INDEX_QUOTES, reportDate, env);
+  await delay(500);
+  const assets = await fetchQuoteSet(ASSET_QUOTES, reportDate, env);
+  await delay(500);
+  const megaCaps = await fetchQuoteSet(MEGACAP_QUOTES, reportDate, env);
+  return [indices, assets, megaCaps];
+}
+
+async function fetchHistoricalQuoteSnapshot(config: QuoteConfig, reportDate: string, env: Env): Promise<QuoteSnapshot> {
+  if (env.FMP_API_KEY && config.fmpSymbol) {
+    const fmpQuote = await fetchFmpQuoteSnapshot(config, reportDate, env.FMP_API_KEY);
+    if (fmpQuote.price !== null) {
+      return fmpQuote;
+    }
+  }
+
+  const startDate = addUtcDays(reportDate, -10);
+  const endDate = addUtcDays(reportDate, 1);
+  const period1 = Math.floor(Date.parse(`${startDate}T00:00:00Z`) / 1000);
+  const period2 = Math.floor(Date.parse(`${endDate}T00:00:00Z`) / 1000);
+
+  const encodedSymbol = encodeURIComponent(config.yahooSymbol);
+  const yahooUrls = [
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodedSymbol}?period1=${period1}&period2=${period2}&interval=1d&events=history`,
+    `https://query2.finance.yahoo.com/v8/finance/chart/${encodedSymbol}?period1=${period1}&period2=${period2}&interval=1d&events=history`,
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodedSymbol}?range=10d&interval=1d&events=history`,
+    `https://query2.finance.yahoo.com/v8/finance/chart/${encodedSymbol}?range=10d&interval=1d&events=history`,
+  ];
+
+  for (const url of yahooUrls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "user-agent": "Mozilla/5.0 (compatible; us-daily-market-report/1.0)",
+          accept: "application/json,text/plain,*/*",
+        },
+      });
+      if (!response.ok) {
+        continue;
+      }
+      const payload = await response.json() as YahooChartResponse;
+      const quote = parseYahooHistoricalQuote(config, reportDate, payload, url.includes("query2") ? "query2" : "query1");
+      if (quote.price !== null) {
+        return quote;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return emptyQuote(config);
+}
+
+function parseYahooHistoricalQuote(
+  config: QuoteConfig,
+  reportDate: string,
+  payload: YahooChartResponse,
+  hostLabel: string,
+): QuoteSnapshot {
+  const result = payload.chart?.result?.[0];
+  const timestamps = result?.timestamp ?? [];
+  const closes = result?.indicators?.quote?.[0]?.close ?? [];
+  const rows = timestamps
+    .map((timestamp, index) => ({
+      date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+      close: typeof closes[index] === "number" && Number.isFinite(closes[index]) ? closes[index] : null,
+    }))
+    .filter((row) => row.close !== null && row.date <= reportDate);
+  const currentIndex = rows.findIndex((row) => row.date === reportDate);
+  if (currentIndex <= 0) {
+    return emptyQuote(config);
+  }
+  const current = rows[currentIndex];
+  const previous = rows[currentIndex - 1];
+  return finalizeQuote(
+    config,
+    previous.close,
+    current.close,
+    null,
+    null,
+    null,
+    current.date,
+    `Yahoo Finance historical chart (${hostLabel})`,
+    rows.map((row) => ({ date: row.date, close: row.close! })).slice(-10),
+  );
+}
+
+async function fetchFmpQuoteSnapshot(config: QuoteConfig, reportDate: string, apiKey: string): Promise<QuoteSnapshot> {
+  if (!config.fmpSymbol) {
+    return emptyQuote(config);
+  }
+  const from = addUtcDays(reportDate, -10);
+  const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${encodeURIComponent(config.fmpSymbol)}&from=${from}&to=${reportDate}&apikey=${encodeURIComponent(apiKey)}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "user-agent": "us-daily-market-report/1.0",
+        accept: "application/json,text/plain,*/*",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`fmp quote ${config.fmpSymbol} failed: ${response.status}`);
+    }
+    const rows = await response.json() as FmpHistoricalRow[] | { Error?: string };
+    if (!Array.isArray(rows)) {
+      throw new Error(`fmp quote ${config.fmpSymbol} unavailable`);
+    }
+    const sortedRows = rows
+      .filter((row) => typeof row.close === "number" && row.date <= reportDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const currentIndex = sortedRows.findIndex((row) => row.date === reportDate);
+    if (currentIndex <= 0) {
+      throw new Error(`fmp quote ${config.fmpSymbol} missing report date ${reportDate}`);
+    }
+    const current = sortedRows[currentIndex];
+    const previous = sortedRows[currentIndex - 1];
+    return finalizeQuote(config, previous.close, current.close, null, null, null, current.date, "Financial Modeling Prep EOD", sortedRows.map((row) => ({ date: row.date, close: row.close })).slice(-10));
+  } catch {
+    return emptyQuote(config);
+  }
 }
 
 async function fetchQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
@@ -336,7 +814,7 @@ async function fetchQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
   try {
     const response = await fetch(url, {
       headers: {
-        "user-agent": "weekly-rss-middleware/1.0",
+        "user-agent": "us-daily-market-report/1.0",
         accept: "application/json,text/plain,*/*",
       },
     });
@@ -354,23 +832,29 @@ async function fetchQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
     const previousClose = price !== null && change !== null ? price - change : null;
     const asOf = normalizeCnbcTime(quote.last_time);
     if (config.symbol === ".TNX") {
-      return finalizeQuote(config, previousClose !== null ? previousClose / 10 : null, price !== null ? price / 10 : null, null, change !== null ? change / 10 : null, changePct, asOf);
+      return finalizeQuote(config, previousClose !== null ? previousClose / 10 : null, price !== null ? price / 10 : null, null, change !== null ? change / 10 : null, changePct, asOf, "CNBC realtime quote");
     }
-    return finalizeQuote(config, previousClose, price, null, change, changePct, asOf);
+    return finalizeQuote(config, previousClose, price, null, change, changePct, asOf, "CNBC realtime quote");
   } catch {
-    return {
-      key: config.key,
-      label: config.label,
-      symbol: config.symbol,
-      kind: config.kind,
-      price: null,
-      previousClose: null,
-      change: null,
-      changePct: null,
-      asOf: null,
-      sourceUrl: config.sourceUrl,
-    };
+    return emptyQuote(config);
   }
+}
+
+function emptyQuote(config: QuoteConfig): QuoteSnapshot {
+  return {
+    key: config.key,
+    label: config.label,
+    symbol: config.symbol,
+    kind: config.kind,
+    price: null,
+    previousClose: null,
+    change: null,
+    changePct: null,
+    asOf: null,
+    sourceUrl: config.sourceUrl,
+    dataProvider: null,
+    history: [],
+  };
 }
 
 function finalizeQuote(
@@ -381,6 +865,8 @@ function finalizeQuote(
   explicitChange?: number | null,
   explicitChangePct?: number | null,
   explicitAsOf?: string | null,
+  dataProvider?: string | null,
+  history: PricePoint[] = [],
 ): QuoteSnapshot {
   const change = explicitChange ?? (price !== null && previousClose !== null ? price - previousClose : null);
   const changePct = explicitChangePct ?? (change !== null && previousClose ? (change / previousClose) * 100 : null);
@@ -395,7 +881,19 @@ function finalizeQuote(
     changePct,
     asOf: explicitAsOf ?? (regularMarketTime ? new Date(regularMarketTime * 1000).toISOString() : null),
     sourceUrl: config.sourceUrl,
+    dataProvider: dataProvider ?? null,
+    history,
   };
+}
+
+function addUtcDays(date: string, days: number): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isUsAiRadar(item: FeedItem): boolean {
@@ -610,6 +1108,13 @@ function renderDailyUsHtml(payload: DailyUsJsonPayload): string {
       </article>
     </section>
 
+    <section id="stock-news">
+      <h2>Individual Stock News</h2>
+      <article class="card">
+        ${payload.stockNews.map((item) => renderStory(item)).join("") || `<p>No individual stock news cleared the threshold.</p>`}
+      </article>
+    </section>
+
     <section id="ai-radar">
       <h2>AI & Big Tech Radar</h2>
       <article class="card">
@@ -744,17 +1249,98 @@ function escapeAttribute(value: string): string {
 }
 
 function getNewYorkDateString(): string {
+  return getTimeZoneClockParts("America/New_York").date;
+}
+
+function getNewYorkClockParts(): { date: string; time: string; minutesSinceMidnight: number } {
+  return getTimeZoneClockParts("America/New_York");
+}
+
+function getTimeZoneClockParts(timeZone: string): { date: string; time: string; minutesSinceMidnight: number } {
   const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
-  return formatter.format(new Date());
+  const parts = Object.fromEntries(
+    formatter.formatToParts(new Date()).map((part) => [part.type, part.value]),
+  );
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+  const hour = Number(parts.hour);
+  const minute = Number(parts.minute);
+  return {
+    date,
+    time: `${parts.hour}:${parts.minute}`,
+    minutesSinceMidnight: hour * 60 + minute,
+  };
+}
+
+function getZonedDateParts(date: Date, timeZone: string): { date: string; minutesSinceMidnight: number } {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  const hour = Number(parts.hour);
+  const minute = Number(parts.minute);
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minutesSinceMidnight: hour * 60 + minute,
+  };
+}
+
+function getRecommendedCompletedUsSessionDate(newYork: { date: string; minutesSinceMidnight: number }): string {
+  const targetDate = newYork.minutesSinceMidnight >= 17 * 60 + 30
+    ? newYork.date
+    : addUtcDays(newYork.date, -1);
+  return previousWeekday(targetDate);
+}
+
+function previousWeekday(date: string): string {
+  let cursor = date;
+  while (true) {
+    const day = new Date(`${cursor}T00:00:00Z`).getUTCDay();
+    if (day !== 0 && day !== 6) {
+      return cursor;
+    }
+    cursor = addUtcDays(cursor, -1);
+  }
 }
 
 interface YahooChartResponse {
-  chart?: never;
+  chart?: {
+    result?: Array<{
+      timestamp?: number[];
+      indicators?: {
+        quote?: Array<{
+          close?: Array<number | null>;
+        }>;
+      };
+    }>;
+  };
+}
+
+interface FmpHistoricalRow {
+  symbol?: string;
+  date: string;
+  open?: number;
+  high?: number;
+  low?: number;
+  close: number;
+  volume?: number;
+  change?: number;
+  changePercent?: number;
 }
 
 interface CnbcQuoteResponse {

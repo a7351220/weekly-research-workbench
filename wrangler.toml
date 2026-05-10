@@ -1,4 +1,4 @@
-name = "weekly-rss-middleware"
+name = "us-daily-market-report"
 main = "src/index.ts"
 compatibility_date = "2025-05-02"
 

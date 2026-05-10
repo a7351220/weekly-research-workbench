@@ -12,10 +12,16 @@ const KOL_SOURCES: Array<{ username: string; priority: number }> = [
   { username: "EricBalchunas", priority: 84 },
   { username: "JSeyff", priority: 82 },
   { username: "EleanorTerrett", priority: 82 },
+  { username: "DegenerateNews", priority: 74 },
   { username: "DefiantNews", priority: 74 },
+  { username: "followin_io_zh", priority: 70 },
+  { username: "lanhubiji", priority: 70 },
   { username: "aixbt_agent", priority: 68 },
   { username: "BinanceResearch", priority: 76 },
   { username: "WSJmarkets", priority: 80 },
+  { username: "BitcoinMagazine", priority: 74 },
+  { username: "alphanonceStaff", priority: 72 },
+  { username: "lookonchain", priority: 72 },
 ];
 
 const SIGNAL_CACHE_KEY = "editorial-signals:v1";

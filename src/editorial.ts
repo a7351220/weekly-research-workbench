@@ -26,674 +26,132 @@ const STOPWORDS = new Set([
   "its",
   "their",
   "about",
-  "week",
   "market",
   "markets",
   "stock",
   "stocks",
   "shares",
   "news",
-  "announces",
-  "announcing",
-  "introducing",
   "company",
-  "crypto",
-  "ai",
-  "our",
-  "your",
-  "their",
-  "more",
-  "how",
-  "why",
-  "what",
-  "when",
-  "where",
-  "using",
-  "use",
-  "guide",
-  "tips",
+  "update",
+  "daily",
 ]);
 
 const ENTITY_PATTERNS: Array<[string, RegExp, string[]]> = [
-  ["alphabet", /\b(alphabet|google|googl)\b/i, ["big_tech", "earnings_watch"]],
-  ["microsoft", /\b(microsoft|msft)\b/i, ["big_tech", "earnings_watch"]],
-  ["amazon", /\b(amazon|amzn)\b/i, ["big_tech", "earnings_watch"]],
-  ["meta", /\b(meta|facebook)\b/i, ["big_tech", "earnings_watch"]],
-  ["apple", /\b(apple|aapl)\b/i, ["big_tech", "earnings_watch"]],
+  ["apple", /\b(apple|aapl)\b/i, ["big_tech"]],
+  ["microsoft", /\b(microsoft|msft)\b/i, ["big_tech", "ai_infra"]],
   ["nvidia", /\b(nvidia|nvda)\b/i, ["chips", "ai_infra"]],
-  ["intel", /\b(intel|intc)\b/i, ["chips", "ai_infra"]],
-  ["amd", /\b(amd)\b/i, ["chips", "ai_infra"]],
-  ["nokia", /\b(nokia)\b/i, ["telecom", "price_action"]],
-  ["strategy", /\b(strategy|microstrategy|mstr|michael saylor|saylor)\b/i, ["crypto_treasury", "fund_flows"]],
-  ["coinbase", /\b(coinbase|coin)\b/i, ["crypto_equities", "fund_flows"]],
-  ["robinhood", /\b(robinhood|hood)\b/i, ["crypto_equities", "fund_flows"]],
-  ["tesla", /\b(tesla|tsla)\b/i, ["crypto_equities"]],
-  ["stablecoin", /\b(stablecoin|usdt|usdc|tether|circle)\b/i, ["fund_flows", "policy"]],
-  ["fed", /\b(federal reserve|fed|powell)\b/i, ["macro_policy"]],
-  ["cpi", /\b(cpi|inflation)\b/i, ["macro_data"]],
-  ["jobs", /\b(payrolls|jobs report|nonfarm|labor market)\b/i, ["macro_data"]],
-  ["gdp", /\b(gdp|economic growth)\b/i, ["macro_data"]],
-  ["bitcoin", /\b(bitcoin|btc)\b/i, ["crypto_core"]],
-  ["ethereum", /\b(ethereum|eth)\b/i, ["crypto_core"]],
-  ["etf", /\b(etf|fund flows|inflows|outflows)\b/i, ["fund_flows"]],
-  ["sp500", /\b(s&p 500|sp500|s and p 500)\b/i, ["index_move"]],
-  ["nasdaq", /\b(nasdaq|nasdaq composite)\b/i, ["index_move"]],
+  ["amazon", /\b(amazon|amzn)\b/i, ["big_tech", "cloud"]],
+  ["alphabet", /\b(alphabet|google|googl|goog)\b/i, ["big_tech", "cloud", "ai_infra"]],
+  ["meta", /\b(meta|facebook)\b/i, ["big_tech", "ai_infra"]],
+  ["tesla", /\b(tesla|tsla)\b/i, ["mega_cap"]],
+  ["amd", /\b(amd|advanced micro devices)\b/i, ["chips", "ai_infra"]],
+  ["intel", /\b(intel|intc)\b/i, ["chips"]],
+  ["dell", /\b(dell)\b/i, ["ai_server", "hardware"]],
+  ["supermicro", /\b(super micro|supermicro|smci)\b/i, ["ai_server", "hardware"]],
+  ["fed", /\b(federal reserve|fed|fomc|powell)\b/i, ["macro_policy"]],
+  ["jobs", /\b(payrolls|nonfarm|jobs report|labor market|unemployment)\b/i, ["macro_data"]],
+  ["inflation", /\b(cpi|ppi|pce|inflation)\b/i, ["macro_data"]],
+  ["rates", /\b(treasury yields?|10-year|10y|rate cuts?|interest rates?)\b/i, ["rates"]],
+  ["sp500", /\b(s&p 500|spx|sp500)\b/i, ["index_move"]],
+  ["nasdaq", /\b(nasdaq|nasdaq 100|qqq)\b/i, ["index_move", "growth"]],
   ["dow", /\b(dow jones|dow)\b/i, ["index_move"]],
+  ["earnings", /\b(earnings|quarterly results|eps|revenue|guidance)\b/i, ["earnings"]],
+  ["ai", /\b(ai|artificial intelligence|gpu|data center|server|cloud|capex|compute)\b/i, ["ai_infra"]],
 ];
 
 const EVENT_PATTERNS: Array<[string, RegExp, number, string[]]> = [
-  ["earnings", /\b(earnings|quarterly results|quarter results|revenue beat|profit beat|sales beat|beat estimates|missed estimates)\b/i, 28, ["earnings"]],
-  ["record_high", /\b(record high|all-time high|fresh high|intraday high)\b/i, 24, ["index_move"]],
-  ["index_move", /\b(s&p 500|nasdaq|dow jones|index)\b/i, 16, ["index_move"]],
-  ["capex", /\b(capex|data center|compute infrastructure|gpu|tpu|server chips|ai infrastructure|cloud spending)\b/i, 18, ["ai_infra"]],
-  ["regulation", /\b(rule|regulation|regulator|enforcement|settlement|approval)\b/i, 18, ["policy"]],
-  ["fund_flows", /\b(etf flows?|inflows?|outflows?|redemptions?|subscriptions?|treasury strategy|buy the dip|accumulat(?:e|ion)|unrealized gain)\b/i, 20, ["fund_flows"]],
-  ["price_move", /\b(surged|jumped|plunged|slid|tumbled|rallied|soared|rose|fell|dropped|gained|decliner|decliners|winner|winners)\b/i, 14, ["price_action"]],
-  ["launch", /\b(launch|release|rollout|debut|unveil)\b/i, 10, ["product"]],
+  ["earnings", /\b(earnings|quarterly results|eps|revenue|profit|guidance|forecast|beat|miss)\b/i, 28, ["earnings"]],
+  ["price_move", /\b(surged|soared|jumped|rallied|rose|gained|fell|dropped|slid|plunged|record high|all-time high)\b/i, 22, ["price_action"]],
+  ["macro_data", /\b(cpi|ppi|pce|payrolls|jobs report|unemployment|gdp|retail sales|consumer confidence)\b/i, 24, ["macro_data"]],
+  ["fed_policy", /\b(fed|fomc|powell|rate cut|interest rate|treasury yield)\b/i, 24, ["macro_policy"]],
+  ["ai_infra", /\b(ai server|data center|gpu|chip|semiconductor|cloud|capex|compute|inference)\b/i, 22, ["ai_infra"]],
+  ["deal_or_policy", /\b(deal|partnership|approval|investigation|tariff|white house|administration|policy)\b/i, 18, ["policy_or_deal"]],
 ];
 
 const LOW_SIGNAL_PATTERNS: Array<[string, RegExp, number]> = [
-  ["howto", /\b(tips|how to|how-to|guide|course|tutorial)\b/i, -22],
-  ["brand_marketing", /\b(celebrating|fun facts|anniversary|community|workshop|partnership with)\b/i, -18],
-  ["soft_update", /\b(signs up|registration is open|available now|try now)\b/i, -12],
-  ["generic_roundup", /\b(here(?:'|’)s what happened|what happened .* today|daily recap|roundup|top stories|week in review)\b/i, -28],
-  ["admin_notice", /\b(statistical notice|request for contact details|summary and minutes|minutes|consultation paper)\b/i, -24],
-  ["clickbait_analysis", /\b(can't ignore|incredible news|you should buy|buy now|just delivered|one of the .* biggest decliners today)\b/i, -20],
-  ["generic_trading_list", /\b(pre-market most active|after hours most active|dow movers|daily dividend report|bull and bear of the day|how long have you owned a stock)\b/i, -28],
-  ["generic_investing_advice", /\b(should you buy|here's why|strong momentum stock|smartest growth stock|buy the dip|worth .* valuation)\b/i, -18],
-  ["taiwan_etf_admin_notice", /(掛牌上市|融資融券|募集發行|專區上線|了解ETF配息來源|收益平準金制度)/i, -26],
+  ["generic_roundup", /\b(roundup|top stories|what happened today|daily recap|most active)\b/i, -28],
+  ["advice_article", /\b(should you buy|buy now|worth buying|best stocks?|how to invest)\b/i, -24],
+  ["soft_marketing", /\b(celebrating|webinar|conference|registration|available now)\b/i, -18],
 ];
 
-const HIGH_SIGNAL_ENTITY_SET = new Set([
-  "alphabet",
-  "microsoft",
-  "amazon",
-  "meta",
-  "apple",
-  "nvidia",
-  "intel",
-  "amd",
-  "nokia",
-  "strategy",
-  "coinbase",
-  "robinhood",
-  "tesla",
-  "stablecoin",
-  "fed",
-  "cpi",
-  "jobs",
-  "gdp",
-  "sp500",
-  "nasdaq",
-  "dow",
-  "bitcoin",
-  "ethereum",
-  "etf",
-]);
-
-const TAIWAN_LOCAL_HARD_SOURCE_SET = new Set([
-  "FSC Press Releases",
-  "TWSE News",
-  "TPEx Press Releases",
-  "MOPS Material Information 201001",
-  "MOPS Material Information 201002",
-  "MOPS Material Information 201003",
-  "CNA Finance",
-  "MoneyDJ Finance News",
-]);
-
-const TAIWAN_LOCAL_STORY_SOURCE_SET = new Set([
-  "CNA Technology",
-  "Yahoo Taiwan Stock News",
-  "Yahoo Taiwan Stock News Feed",
-  "Yahoo Taiwan Stock Research",
-  "Yahoo Taiwan Funds News",
-  "Cnyes Taiwan Stock News",
-  "UDN Taiwan Stock News",
-  "UDN Taiwan Industry News",
-  "Business Weekly Investment",
-]);
-
-const TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET = new Set([
-  "DIGITIMES Daily",
-  "TechNews Finance",
-]);
-
-const TAIWAN_EN_MARKET_CORE_SOURCE_SET = new Set([
-  "Focus Taiwan Business",
-]);
-
-const TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET = new Set([
-  "Taipei Times Business",
-]);
-
-const TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET = new Set([
-  "TrendForce Semiconductors",
-  "TrendForce News",
-]);
-
-const TAIWAN_SUPPLY_CHAIN_PATTERN =
-  /(台積電|鴻海|廣達|緯創|緯穎|技嘉|英業達|台達電|光寶科|欣興|南電|聯發科|創意|世芯|日月光|京元電|金像電|智邦|奇鋐|雙鴻|台燿|信驊|神達|仁寶|和碩|華碩|宏碁|微星|台廠|供應鏈|AI伺服器|資料中心|載板|散熱|PCB|CPO|矽光子|2奈米|先進封裝)/i;
-
-const TAIWAN_AI_CONTEXT_PATTERN =
-  /(\bai\b|人工智慧|資料中心|data center|csp|gpu|asic|伺服器|server|算力|nvidia|amd|intel|rubin|blackwell|h100|h200|b200|cloud|雲端|電源|散熱|載板|cpo|矽光子|先進封裝|2奈米)/i;
-
-const TAIWAN_EN_COMPANY_PATTERN =
-  /(tsmc|taiwan semiconductor|hon hai|foxconn|mediatek|umc|ase|siliconware|lite-on|quanta|wistron|wiwynn|inventec|compal|pegatron|delta|advantech|asus|acer|msi|gigabyte|realtek|novatek|nanya|yageo|jpc|cpc)/i;
-
-const TAIWAN_EN_MARKET_PATTERN =
-  /(taiex|taiwan shares?|stock market|stocks? exchange|earnings|revenue|profit|guidance|exports?|orders?|gdp|growth|inflation|cpi|rating|outlook|currency|trading|trade|investment|tariff|bond|etf|yield|semiconductor|chip|chips|ai|server|data center|supply chain|capex|cloud)/i;
-
-function isTaiwanSupplyChainStory(
-  text: string,
-  topicEntities: string[],
-  topicTags: string[],
-): boolean {
-  if (TAIWAN_SUPPLY_CHAIN_PATTERN.test(text) && TAIWAN_AI_CONTEXT_PATTERN.test(text)) {
-    return true;
-  }
-
-  if (
-    topicEntities.some((entity) =>
-      ["nvidia", "amd", "intel"].includes(entity),
-    ) &&
-    topicTags.some((tag) => ["ai_infra", "chips", "earnings"].includes(tag))
-  ) {
-    return true;
-  }
-
-  if (/(AI伺服器|資料中心|cpo|矽光子|先進封裝|2奈米)/i.test(text)) {
-    return true;
-  }
-
-  return false;
-}
-
-function isTaiwanAdministrativeFundNotice(text: string): boolean {
-  return /(掛牌上市|融資融券|募集發行|專區上線|了解ETF配息來源|收益平準金制度)/i.test(text);
-}
-
-function isTaiwanEnglishMarketStory(text: string): boolean {
-  if (TAIWAN_EN_COMPANY_PATTERN.test(text)) {
-    return true;
-  }
-
-  const hasTaiwanAnchor = /\b(taiwan|taiwanese|taipei|taiex)\b/i.test(text);
-  if (hasTaiwanAnchor && TAIWAN_EN_MARKET_PATTERN.test(text)) {
-    return true;
-  }
-
-  if (/(nvidia|amd|intel|csp|hyperscaler|server|data center|supply chain|semiconductor)/i.test(text) &&
-      /(partner|partners|supplier|suppliers|manufactur|assembly|packaging)/i.test(text) &&
-      /(taiwan|taiwanese|tsmc|hon hai|foxconn|quanta|wistron|wiwynn|lite-on|advantech|delta)/i.test(text)) {
-    return true;
-  }
-
-  return false;
-}
-
-function isTaiwanBroadMarketStory(text: string): boolean {
-  return /(taiex|taiwan\s+shares?|stock\s+market|growth\s+outlook|gdp|economic\s+growth|rating|outlook\s+stable|u\.s\.\s+dollar|inflation|cpi|exports?|trade\s+and\s+investment|economy|台股早盤|台股開盤|台股收盤|加權指數|台灣股市|台灣經濟|成長率|評等|匯率|外資|大盤)/i.test(text);
-}
-
-export function scoreBaseEditorial(item: FeedItem): {
-  score: number;
-  signals: string[];
-  topicTags: string[];
-  topicEntities: string[];
-} {
-  const text = `${item.title} ${item.description}`;
-  const titleText = item.title;
-  const signals = new Set<string>(item.reportSignals);
+export function scoreBaseEditorial(item: FeedItem): FeedItem {
+  const text = `${item.title} ${item.description}`.toLowerCase();
   const topicTags = new Set<string>();
   const topicEntities = new Set<string>();
+  const editorialSignals: string[] = [];
+  let eventType: string | null = null;
+  let majorEntity: string | null = null;
   let score = item.reportScore + Math.round(item.sourcePriority / 4);
 
   if (item.sourceType === "official") {
-    score += 10;
-    signals.add("official_weight");
+    score += 18;
+    editorialSignals.push("official_source");
   } else if (item.sourceType === "research") {
-    score += 6;
-    signals.add("research_weight");
+    score += 10;
+    editorialSignals.push("research_source");
   }
 
   for (const [entity, pattern, tags] of ENTITY_PATTERNS) {
     if (pattern.test(text)) {
       topicEntities.add(entity);
-      for (const tag of tags) {
-        topicTags.add(tag);
-      }
-      score += HIGH_SIGNAL_ENTITY_SET.has(entity) ? 12 : 8;
-      signals.add(`entity:${entity}`);
+      for (const tag of tags) topicTags.add(tag);
+      if (!majorEntity) majorEntity = entity;
     }
   }
 
-  for (const [name, pattern, weight, tags] of EVENT_PATTERNS) {
+  for (const [event, pattern, weight, tags] of EVENT_PATTERNS) {
     if (pattern.test(text)) {
       score += weight;
-      signals.add(`event:${name}`);
-      for (const tag of tags) {
-        topicTags.add(tag);
-      }
+      eventType ??= event;
+      editorialSignals.push(event);
+      for (const tag of tags) topicTags.add(tag);
     }
   }
 
-  for (const [name, pattern, weight] of LOW_SIGNAL_PATTERNS) {
+  for (const [signal, pattern, weight] of LOW_SIGNAL_PATTERNS) {
     if (pattern.test(text)) {
       score += weight;
-      signals.add(`penalty:${name}`);
+      editorialSignals.push(signal);
     }
   }
 
-  if (/\b(shares?|stock)\b/i.test(text) && /\b([1-9]\d?%|percent)\b/i.test(text)) {
-    score += 18;
-    topicTags.add("price_action");
-    signals.add("explicit_market_reaction");
-  }
-
-  if (/\b(surged|jumped|fell|dropped|slid|tumbled|rallied|soared|gains|decliner|decliners)\b/i.test(titleText)) {
+  const numbers = text.match(/\b\d+(?:\.\d+)?\s?(?:%|bps|million|billion|trillion|m|b|t|x)?\b/g) ?? [];
+  if (numbers.length >= 2) {
     score += 12;
-    topicTags.add("price_action");
-    signals.add("headline_market_reaction");
+    editorialSignals.push("number_dense");
+  }
+  if (item.publishedAt) {
+    score += 8;
+  }
+  if (item.ageHours !== null && item.ageHours <= 36) {
+    score += 10;
+    editorialSignals.push("fresh");
   }
 
-  if (
-    /\b(alphabet|google|microsoft|amazon|meta|apple|nvidia|intel|amd)\b/i.test(text) &&
-    /\b(earnings|results|guidance|outlook|forecast)\b/i.test(text)
-  ) {
-    score += 24;
-    topicTags.add("earnings");
-    topicTags.add("big_tech");
-    signals.add("mega_cap_earnings");
-  }
-
-  if (
-    /\b(s&p 500|nasdaq|dow jones)\b/i.test(text) &&
-    /\b(record high|all-time high|fresh high|intraday high)\b/i.test(text)
-  ) {
-    score += 30;
-    topicTags.add("index_move");
-    signals.add("record_high_major_index");
-  }
-
-  if (
-    /\b(capex|data center|gpu|tpu|compute infrastructure|cloud spending|server chips)\b/i.test(text) &&
-    /\b(alphabet|google|microsoft|amazon|meta|nvidia|intel|amd|openai)\b/i.test(text)
-  ) {
-    score += 20;
-    topicTags.add("ai_infra");
-    signals.add("ai_capex_mainline");
-  }
-
-  if (/\b(strategy|microstrategy|mstr|michael saylor|saylor)\b/i.test(text)) {
-    score += 26;
-    topicTags.add("fund_flows");
-    topicTags.add("crypto_treasury");
-    signals.add("strategy_priority");
-  }
-
-  if (
-    /\b(etf|fund flows|inflows|outflows|redemptions|subscriptions|stablecoin|usdt|usdc)\b/i.test(text)
-  ) {
-    score += 18;
-    topicTags.add("fund_flows");
-    signals.add("crypto_flow_signal");
-  }
-
-  if (
-    /\b(sec|cftc|stablecoin|regulation|approval|enforcement|settlement|lawmakers?)\b/i.test(text) &&
-    /\b(bitcoin|btc|ethereum|eth|crypto|exchange|coinbase|binance|etf|stablecoin)\b/i.test(text)
-  ) {
-    score += 20;
-    topicTags.add("policy");
-    signals.add("crypto_policy_mainline");
-  }
-
-  if (
-    /\b(s&p 500|nasdaq|dow jones|record high|all-time high|risk assets?)\b/i.test(text) &&
-    /\b(bitcoin|btc|ethereum|eth|crypto|etf|strategy)\b/i.test(text)
-  ) {
-    score += 18;
-    topicTags.add("index_move");
-    signals.add("crypto_x_macro_linkage");
-  }
-
-  if (
-    /\b(alphabet|google|microsoft|amazon|meta|apple|nvidia|intel|amd|nokia)\b/i.test(text) &&
-    /\b(surged|jumped|plunged|slid|tumbled|rallied|soared|rose|fell|dropped|gained|record high|all-time high|decliner|decliners)\b/i.test(text)
-  ) {
-    score += 18;
-    topicTags.add("price_action");
-    signals.add("mega_cap_price_reaction");
-  }
-
-  if (
-    /\b(mag 7|magnificent 7|alphabet|google|microsoft|amazon|meta|apple|nvidia|intel|amd|nokia)\b/i.test(text) &&
-    /\b(earnings|guidance|forecast|gains|decliner|decliners|record high|all-time high)\b/i.test(text)
-  ) {
-    score += 20;
-    topicTags.add("price_action");
-    topicTags.add("big_tech");
-    signals.add("equity_mainline_reaction");
-  }
-
-  if (item.ageHours !== null) {
-    if (item.ageHours <= 24) {
-      score += 10;
-      signals.add("fresh_lt_24h");
-    } else if (item.ageHours <= 72) {
-      score += 6;
-      signals.add("fresh_lt_72h");
-    } else if (item.ageHours <= 168) {
-      score += 2;
-      signals.add("fresh_lt_7d");
-    }
-  }
-
-  if (item.category === "us_stocks_macro") {
-    if (topicTags.has("earnings") || topicTags.has("index_move") || topicTags.has("macro_data")) {
-      score += 16;
-      signals.add("market_weekly_fit");
-    }
-  }
-
-  if (item.category === "ai" && (topicTags.has("ai_infra") || topicTags.has("earnings"))) {
-    score += 12;
-    signals.add("ai_weekly_fit");
-  }
-
-  if (item.category === "crypto" && (topicTags.has("policy") || topicTags.has("fund_flows"))) {
-    score += 16;
-    signals.add("crypto_weekly_fit");
-  }
-
-  if (item.category === "taiwan_stocks") {
-    const isSupplyChainStory = isTaiwanSupplyChainStory(
-      text,
-      Array.from(topicEntities),
-      Array.from(topicTags),
-    );
-    const isAdministrativeFundNotice = isTaiwanAdministrativeFundNotice(text);
-    const isEnglishMarketStory = isTaiwanEnglishMarketStory(text);
-
-    if (/(台積電|聯發科|世芯|創意|日月光|京元電|2奈米|先進封裝|半導體)/i.test(text)) {
-      topicTags.add("taiwan_semis");
-    }
-    if (/(欣興|南電|金像電|PCB|載板)/i.test(text)) {
-      topicTags.add("taiwan_pcb");
-    }
-    if (/(ETF|高股息|主動式ETF|0050|006208|00940|00919|00878|基金|殖利率|配息)/i.test(text)) {
-      topicTags.add("taiwan_etf_flows");
-    }
-    if (/(證交所|櫃買中心|金管會|MOPS|重大訊息|掛牌上市|融資融券|公開資訊觀測站)/i.test(text)) {
-      topicTags.add("taiwan_policy");
-    }
-    if (/(資料中心|data center|機房|雲端|CSP)/i.test(text)) {
-      topicTags.add("taiwan_data_center");
-    }
-    if (isTaiwanBroadMarketStory(text)) {
-      topicTags.add("taiwan_market_story");
-    }
-    if (isSupplyChainStory) {
-      topicTags.add("taiwan_ai_supply_chain");
-    }
-    if (isAdministrativeFundNotice) {
-      topicTags.add("taiwan_admin_notice");
-      score -= 18;
-      signals.add("penalty:taiwan_admin_notice");
-    }
-
-    if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
-      score += 12;
-      signals.add("taiwan_hard_source_fit");
-    } else if (TAIWAN_LOCAL_STORY_SOURCE_SET.has(item.source)) {
-      score += 6;
-      signals.add("taiwan_story_source_fit");
-    } else if (TAIWAN_EN_MARKET_CORE_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 10 : 8;
-      signals.add(
-        isSupplyChainStory
-          ? "taiwan_en_market_supply_chain_fit"
-          : "taiwan_en_market_core_fit",
-      );
-      if (!isEnglishMarketStory) {
-        score -= 22;
-        signals.add("penalty:taiwan_en_market_not_relevant");
-      }
-    } else if (TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 8 : 4;
-      signals.add(
-        isSupplyChainStory
-          ? "taiwan_en_context_supply_chain_fit"
-          : "taiwan_en_market_context_fit",
-      );
-      if (!isEnglishMarketStory) {
-        score -= 26;
-        signals.add("penalty:taiwan_en_context_not_relevant");
-      }
-    } else if (TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 14 : 1;
-      signals.add(
-        isSupplyChainStory
-          ? "taiwan_en_supply_chain_fit"
-          : "taiwan_en_supply_chain_background",
-      );
-      if (!isEnglishMarketStory) {
-        score -= 18;
-        signals.add("penalty:taiwan_en_supply_chain_not_relevant");
-      }
-    } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 12 : 3;
-      signals.add(
-        isSupplyChainStory
-          ? "taiwan_industry_supply_chain_fit"
-          : "taiwan_industry_context_fit",
-      );
-    }
-
-    if (
-      (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source) ||
-        TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) &&
-      !isSupplyChainStory
-    ) {
-      score -= 6;
-      signals.add("penalty:taiwan_context_not_localized");
-    }
-  }
-
-  if (
-    item.sourceType === "official" &&
-    !topicTags.has("macro_data") &&
-    !topicTags.has("earnings") &&
-    !topicTags.has("fund_flows") &&
-    !topicTags.has("price_action") &&
-    !Array.from(topicEntities).some((entity) =>
-      ["fed", "cpi", "jobs", "gdp", "sp500", "nasdaq", "strategy", "bitcoin", "ethereum", "etf"].includes(entity),
-    )
-  ) {
-    score -= 22;
-    signals.add("penalty:official_low_signal");
-  }
-
-  if (
-    item.category === "us_stocks_macro" &&
-    item.source === "Bank of England News" &&
-    !topicTags.has("index_move") &&
-    !topicTags.has("earnings") &&
-    !/federal reserve|fed|s&p 500|nasdaq|dow jones/i.test(text)
-  ) {
-    score -= 28;
-    signals.add("penalty:non_us_macro_backdrop");
-  }
-
-  if (
-    item.category === "us_stocks_macro" &&
-    item.source === "Yahoo Finance" &&
-    /\b(can't ignore|you should buy|buy now|just delivered|good stock to buy now)\b/i.test(text)
-  ) {
-    score -= 18;
-    signals.add("penalty:clickbait_yahoo");
-  }
-
-  return {
-    score: Math.max(0, score),
-    signals: Array.from(signals),
-    topicTags: Array.from(topicTags),
-    topicEntities: Array.from(topicEntities),
-  };
-}
-
-export function buildTopicKey(title: string, entities: string[]): string {
-  if (entities.length > 0) {
-    return entities.sort().join("|");
-  }
-
-  const tokens = tokenize(title).slice(0, 5);
-  return tokens.join("|");
-}
-
-export function tokenize(input: string): string[] {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fff\s]+/g, " ")
-    .split(/\s+/)
-    .filter((token) => token.length >= 3 || /[\u4e00-\u9fff]/.test(token))
-    .filter((token) => !STOPWORDS.has(token));
-}
-
-export function enrichWithEditorialSignals(
-  item: FeedItem,
-  topics: EditorialTopic[],
-): FeedItem {
-  const base = scoreBaseEditorial(item);
-  const itemTopicKey = buildTopicKey(item.title, base.topicEntities);
-  const itemTokens = new Set(tokenize(`${item.title} ${item.description}`));
-
-  let matchedTopic: EditorialTopic | null = null;
-  let bestScore = 0;
-  for (const topic of topics) {
-    let score = 0;
-    const hasEntityOverlap =
-      topic.topicEntities.filter((entity) => base.topicEntities.includes(entity)).length > 0;
-    const hasTagOverlap =
-      topic.topicTags.filter((tag) => base.topicTags.includes(tag)).length > 0;
-
-    if (topic.topicKey === itemTopicKey) {
-      score += 8;
-    }
-
-    const entityOverlap = topic.topicEntities.filter((entity) =>
-      base.topicEntities.includes(entity),
-    ).length;
-    score += entityOverlap * 4;
-
-    const tagOverlap = topic.topicTags.filter((tag) =>
-      base.topicTags.includes(tag),
-    ).length;
-    score += tagOverlap * 2;
-
-    const topicTokens = new Set(tokenize(topic.title));
-    let tokenOverlap = 0;
-    for (const token of topicTokens) {
-      if (itemTokens.has(token)) {
-        tokenOverlap += 1;
-      }
-    }
-    score += tokenOverlap;
-
-    if (!hasEntityOverlap && !hasTagOverlap && tokenOverlap < 3) {
-      score = 0;
-    }
-
-    if (Array.from(base.signals).some((signal) => signal.startsWith("penalty:")) && !hasEntityOverlap) {
-      score -= 6;
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      matchedTopic = topic;
-    }
-  }
-
-  let signalWeightedBaseScore = base.score;
-  const editorialSignals = [...base.signals];
-  let crossSourceCount = 0;
-  let socialProof = 0;
-  const topicTags = [...base.topicTags];
-  const topicEntities = [...base.topicEntities];
-
-  if (matchedTopic && bestScore >= 7) {
-    const signalBoost = Math.min(
-      28,
-      matchedTopic.sourceCount * 8 + Math.min(12, Math.round(Math.log10(Math.max(matchedTopic.totalEngagement, 1)) * 4)),
-    );
-    signalWeightedBaseScore += signalBoost;
-    editorialSignals.push("signal_topic_match");
-    editorialSignals.push(`cross_source:${matchedTopic.sourceCount}`);
-    crossSourceCount = matchedTopic.sourceCount;
-    socialProof = matchedTopic.totalEngagement;
-
-    for (const tag of matchedTopic.topicTags) {
-      if (!topicTags.includes(tag)) {
-        topicTags.push(tag);
-      }
-    }
-    for (const entity of matchedTopic.topicEntities) {
-      if (!topicEntities.includes(entity)) {
-        topicEntities.push(entity);
-      }
-    }
-  }
-
-  const eventType = deriveEventType(topicTags, editorialSignals);
-  const majorEntity = deriveMajorEntity(topicEntities);
+  const sourceQualityScore =
+    item.sourceType === "official" ? 90 : item.sourceType === "research" ? 78 : Math.min(85, 45 + item.sourcePriority / 2);
+  const evidenceScore = Math.min(100, numbers.length * 10 + (item.sourceType === "official" ? 30 : 10));
+  const storyValueScore = Math.min(100, Math.max(0, score));
+  const marketReactionScore = /\b(surged|soared|jumped|rallied|fell|dropped|record high|all-time high|%\b)\b/i.test(text)
+    ? 75
+    : 35;
   const marketTheme = deriveMarketTheme(item.category, topicTags, majorEntity, eventType);
   const clusterKey = buildClusterKey(item.category, eventType, majorEntity, marketTheme, topicTags);
-  const evidenceScore = scoreEvidence(item);
-  const substantiationScore = scoreSubstantiation(item, topicTags, topicEntities);
-  const sourceQualityScore = scoreSourceQuality(item, base.topicTags, base.topicEntities);
-  const corroborationScore = scoreCorroboration(
-    matchedTopic,
-    bestScore,
-    sourceQualityScore,
-    topicTags,
-    topicEntities,
-  );
-  const marketReactionScore = scoreMarketReaction(item, topicTags, editorialSignals, majorEntity);
-  const storyValueScore = scoreStoryValue(
-    item,
-    signalWeightedBaseScore,
-    topicTags,
-    topicEntities,
-    eventType,
-    marketTheme,
-  );
-  const penaltyScore = scorePenalty(item, editorialSignals);
-  const editorialScore = scoreEditorialComposite({
-    sourceQualityScore,
-    evidenceScore,
-    substantiationScore,
-    corroborationScore,
-    marketReactionScore,
-    storyValueScore,
-    penaltyScore,
-  });
 
   return {
     ...item,
     evidenceScore,
-    substantiationScore,
+    substantiationScore: Math.min(100, Math.round((sourceQualityScore + evidenceScore) / 2)),
     storyValueScore,
-    penaltyScore,
+    penaltyScore: Math.max(0, -Math.min(0, score)),
     sourceQualityScore,
-    corroborationScore,
+    corroborationScore: 0,
     marketReactionScore,
-    editorialScore,
-    editorialSignals,
-    topicTags,
-    topicEntities,
-    crossSourceCount,
-    socialProof,
+    editorialScore: Math.min(100, Math.max(0, score)),
+    editorialSignals: unique([...item.editorialSignals, ...editorialSignals]),
+    topicTags: unique([...item.topicTags, ...topicTags]),
+    topicEntities: unique([...item.topicEntities, ...topicEntities]),
     eventType,
     majorEntity,
     marketTheme,
@@ -701,368 +159,47 @@ export function enrichWithEditorialSignals(
   };
 }
 
-function scoreEvidence(item: FeedItem): number {
-  const rawText = `${item.title} ${item.rawDescription || item.description}`;
-  const cleanText = `${item.title} ${item.description}`;
-  const numberCount = rawText.match(/\$?\d[\d,.]*%?/g)?.length ?? 0;
-  const quoteCount =
-    (rawText.match(/[“”"'`]/gu)?.length ?? 0) > 0 ||
-    /\b(said|says|according to|told)\b/i.test(rawText)
-      ? 1
-      : 0;
-  const paragraphLikeScore = cleanText.length >= 320 ? 15 : cleanText.length >= 180 ? 10 : cleanText.length >= 90 ? 5 : 0;
+export function enrichWithEditorialSignals(item: FeedItem, topics: EditorialTopic[] = []): FeedItem {
+  const scored = scoreBaseEditorial(item);
+  let socialProof = 0;
+  const matchedSignals: string[] = [];
+  const entities = new Set(scored.topicEntities);
+  const tags = new Set(scored.topicTags);
 
-  let score = 0;
-  if (numberCount >= 6) {
-    score += 30;
-  } else if (numberCount >= 3) {
-    score += 20;
-  } else if (numberCount >= 1) {
-    score += 10;
-  }
-
-  score += quoteCount > 0 ? 15 : 0;
-  score += paragraphLikeScore;
-
-  if (item.sourceType === "official") {
-    score += 20;
-  } else if (item.sourceType === "research") {
-    score += 10;
-  }
-
-  if (/\b(earnings|results|guidance|forecast|revenue|profit|sales)\b/i.test(rawText)) {
-    score += 10;
-  }
-
-  return Math.min(100, Math.max(0, score));
-}
-
-function scoreSubstantiation(
-  item: FeedItem,
-  topicTags: string[],
-  topicEntities: string[],
-): number {
-  const titleTokens = new Set(tokenize(item.title));
-  const bodyTokens = new Set(tokenize(item.rawDescription || item.description));
-  let overlap = 0;
-  for (const token of titleTokens) {
-    if (bodyTokens.has(token)) {
-      overlap += 1;
+  for (const topic of topics.slice(0, 40)) {
+    const entityOverlap = topic.topicEntities.filter((entity) => entities.has(entity)).length;
+    const tagOverlap = topic.topicTags.filter((tag) => tags.has(tag)).length;
+    if (entityOverlap === 0 && tagOverlap < 2) {
+      continue;
     }
+    socialProof += topic.signalScore;
+    matchedSignals.push(`signal:${topic.topicKey}`);
   }
 
-  const titleNumbers = item.title.match(/\$?\d[\d,.]*%?/g)?.length ?? 0;
-  const bodyNumbers = (item.rawDescription || item.description).match(/\$?\d[\d,.]*%?/g)?.length ?? 0;
-  const hasEntitySupport = topicEntities.some((entity) =>
-    new RegExp(`\\b${entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(item.rawDescription || item.description),
-  );
-
-  let score = 20;
-  if (overlap >= 4) {
-    score += 25;
-  } else if (overlap >= 2) {
-    score += 15;
-  } else if (overlap >= 1) {
-    score += 8;
-  }
-
-  if (titleNumbers > 0 && bodyNumbers > 0) {
-    score += 20;
-  } else if (bodyNumbers > 0) {
-    score += 10;
-  }
-
-  if (hasEntitySupport) {
-    score += 10;
-  }
-
-  if (topicTags.some((tag) => ["earnings", "policy", "fund_flows", "macro_data"].includes(tag))) {
-    score += 10;
-  }
-
-  if ((item.rawDescription || item.description).length < 80) {
-    score -= 10;
-  }
-
-  if (/\b(how to|guide|tutorial|tips)\b/i.test(item.title)) {
-    score -= 15;
-  }
-
-  return Math.min(100, Math.max(0, score));
+  const corroborationScore = Math.min(100, Math.round(socialProof / 2));
+  return {
+    ...scored,
+    socialProof,
+    corroborationScore,
+    editorialScore: Math.min(100, scored.editorialScore + Math.min(18, Math.round(socialProof / 12))),
+    editorialSignals: unique([...scored.editorialSignals, ...matchedSignals]),
+  };
 }
 
-function scoreStoryValue(
-  item: FeedItem,
-  baseScore: number,
-  topicTags: string[],
-  topicEntities: string[],
-  eventType: string | null,
-  marketTheme: string | null,
-): number {
-  let score = Math.min(70, Math.max(10, Math.round(baseScore * 0.45)));
-
-  if (eventType) {
-    score += 10;
-  }
-  if (marketTheme) {
-    score += 8;
-  }
-  if (topicEntities.length > 0) {
-    score += Math.min(10, topicEntities.length * 4);
-  }
-  if (topicTags.some((tag) => ["earnings", "fund_flows", "ai_infra", "macro_data", "taiwan_ai_supply_chain", "taiwan_market_story"].includes(tag))) {
-    score += 12;
-  }
-  if (item.category === "taiwan_stocks" && topicTags.some((tag) => tag.startsWith("taiwan_"))) {
-    score += 8;
-  }
-  if (item.ageHours !== null && item.ageHours <= 72) {
-    score += 5;
-  }
-
-  return Math.min(100, Math.max(0, score));
-}
-
-function scorePenalty(item: FeedItem, editorialSignals: string[]): number {
-  const penaltyCount = editorialSignals.filter((signal) => signal.startsWith("penalty:")).length;
-  let penalty = penaltyCount * 7;
-  const text = `${item.title} ${item.description}`;
-  if (item.category === "taiwan_stocks" && isTaiwanAdministrativeFundNotice(text)) {
-    penalty += 8;
-  }
-  if (/\b(roundup|daily recap|week in review)\b/i.test(text)) {
-    penalty += 10;
-  }
-  return Math.min(40, Math.max(0, penalty));
-}
-
-function scoreEditorialComposite(input: {
-  sourceQualityScore: number;
-  evidenceScore: number;
-  substantiationScore: number;
-  corroborationScore: number;
-  marketReactionScore: number;
-  storyValueScore: number;
-  penaltyScore: number;
-}): number {
-  const composite =
-    0.22 * input.sourceQualityScore +
-    0.2 * input.evidenceScore +
-    0.15 * input.substantiationScore +
-    0.18 * input.corroborationScore +
-    0.15 * input.marketReactionScore +
-    0.1 * input.storyValueScore;
-
-  return Math.max(0, Math.round(composite * 1.5 - input.penaltyScore));
-}
-
-function scoreSourceQuality(
-  item: FeedItem,
-  topicTags: string[],
-  topicEntities: string[],
-): number {
-  let score = 0;
-
-  if (item.sourceType === "official") {
-    score += 100;
-  } else if (item.sourceType === "research") {
-    score += 75;
-  } else {
-    score += item.sourcePriority >= 80 ? 80 : item.sourcePriority >= 60 ? 70 : 60;
-  }
-
-  if (
-    item.sourceType === "official" ||
-    topicTags.includes("earnings") ||
-    topicTags.includes("macro_data") ||
-    topicTags.includes("policy") ||
-    topicTags.includes("fund_flows")
-  ) {
-    score += 10;
-  }
-
-  const numberMatches =
-    item.title.match(/\$?\d[\d,.]*%?/g)?.length ?? 0;
-  if (numberMatches >= 2) {
-    score += 10;
-  } else if (numberMatches === 1) {
-    score += 5;
-  }
-
-  const rawText = `${item.title} ${item.rawDescription || item.description}`;
-  if (/[“”"'`]/u.test(rawText) || /\b(said|says|according to|told)\b/i.test(rawText)) {
-    score += 10;
-  }
-
-  if (
-    topicEntities.some((entity) =>
-      ["fed", "cpi", "jobs", "gdp", "strategy", "stablecoin", "bitcoin", "ethereum", "etf"].includes(entity),
-    )
-  ) {
-    score += 5;
-  }
-
-  if (item.category === "taiwan_stocks") {
-    const isSupplyChainStory = isTaiwanSupplyChainStory(
-      `${item.title} ${item.description}`,
-      topicEntities,
-      topicTags,
-    );
-    const isEnglishMarketStory = isTaiwanEnglishMarketStory(
-      `${item.title} ${item.description}`,
-    );
-
-    if (TAIWAN_LOCAL_HARD_SOURCE_SET.has(item.source)) {
-      score += 10;
-    } else if (TAIWAN_LOCAL_STORY_SOURCE_SET.has(item.source)) {
-      score += 4;
-    } else if (TAIWAN_EN_MARKET_CORE_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 8 : 6;
-      if (!isEnglishMarketStory) {
-        score -= 10;
-      }
-    } else if (TAIWAN_EN_MARKET_CONTEXT_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 6 : 2;
-      if (!isEnglishMarketStory) {
-        score -= 12;
-      }
-    } else if (TAIWAN_EN_SUPPLY_CHAIN_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 8 : -4;
-      if (!isEnglishMarketStory) {
-        score -= 10;
-      }
-    } else if (TAIWAN_INDUSTRY_CONTEXT_SOURCE_SET.has(item.source)) {
-      score += isSupplyChainStory ? 6 : -6;
-    }
-  }
-
-  return Math.min(100, Math.max(0, score));
-}
-
-function scoreCorroboration(
-  matchedTopic: EditorialTopic | null,
-  bestScore: number,
-  sourceQualityScore: number,
-  topicTags: string[],
-  topicEntities: string[],
-): number {
-  let score = 0;
-
-  if (matchedTopic && bestScore >= 7) {
-    score += Math.min(45, matchedTopic.sourceCount * 12);
-
-    const typeCount = new Set([
-      matchedTopic.topicTags.includes("policy") ? "official" : null,
-      matchedTopic.topicTags.includes("fund_flows") ? "flows" : null,
-      matchedTopic.topicTags.includes("price_action") ? "market" : null,
-    ].filter(Boolean)).size;
-    score += typeCount * 8;
-
-    if (
-      matchedTopic.topicEntities.some((entity) =>
-        ["stablecoin", "strategy", "bitcoin", "ethereum", "sp500", "nasdaq", "fed"].includes(entity),
-      )
-    ) {
-      score += 10;
-    }
-  }
-
-  if (topicTags.includes("policy") && topicTags.includes("fund_flows")) {
-    score += 12;
-  }
-
-  if (
-    topicEntities.some((entity) => ["sp500", "nasdaq", "fed", "stablecoin", "strategy"].includes(entity)) &&
-    topicTags.some((tag) => ["index_move", "fund_flows", "policy"].includes(tag))
-  ) {
-    score += 8;
-  }
-
-  if (sourceQualityScore >= 90) {
-    score += 5;
-  }
-
-  return Math.min(100, Math.max(0, score));
-}
-
-function scoreMarketReaction(
-  item: FeedItem,
-  topicTags: string[],
-  editorialSignals: string[],
-  majorEntity: string | null,
-): number {
-  let score = 0;
-  const text = `${item.title} ${item.description}`;
-  const isAdministrativeFundNotice =
-    item.category === "taiwan_stocks" && isTaiwanAdministrativeFundNotice(text);
-
-  if (topicTags.includes("price_action")) {
-    score += 25;
-  }
-  if (topicTags.includes("index_move")) {
-    score += 20;
-  }
-  if (topicTags.includes("fund_flows")) {
-    score += 18;
-  }
-  if (editorialSignals.includes("explicit_market_reaction")) {
-    score += 20;
-  }
-  if (editorialSignals.includes("headline_market_reaction")) {
-    score += 15;
-  }
-  if (editorialSignals.includes("mega_cap_price_reaction")) {
-    score += 15;
-  }
-  if (editorialSignals.includes("record_high_major_index")) {
-    score += 15;
-  }
-  if (/\b([1-9]\d?%|percent)\b/i.test(text)) {
-    score += 10;
-  }
-  if (
-    majorEntity &&
-    ["apple", "alphabet", "microsoft", "amazon", "meta", "nvidia", "intel", "amd", "strategy", "bitcoin", "ethereum", "sp500", "nasdaq"].includes(majorEntity)
-  ) {
-    score += 10;
-  }
-
-  if (isAdministrativeFundNotice) {
-    score -= 22;
-  }
-
-  return Math.min(100, Math.max(0, score));
-}
-
-export function sortItemsForWeekly(items: FeedItem[]): FeedItem[] {
+export function sortDailyItems(items: FeedItem[]): FeedItem[] {
   return [...items].sort((a, b) => {
-    if (b.editorialScore !== a.editorialScore) {
-      return b.editorialScore - a.editorialScore;
-    }
-    if (b.crossSourceCount !== a.crossSourceCount) {
-      return b.crossSourceCount - a.crossSourceCount;
-    }
-    if (b.socialProof !== a.socialProof) {
-      return b.socialProof - a.socialProof;
-    }
-    if (a.publishedAt && b.publishedAt) {
-      return Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
-    }
-    if (a.publishedAt) {
-      return -1;
-    }
-    if (b.publishedAt) {
-      return 1;
-    }
+    if (b.editorialScore !== a.editorialScore) return b.editorialScore - a.editorialScore;
+    if (b.socialProof !== a.socialProof) return b.socialProof - a.socialProof;
+    if (b.sourcePriority !== a.sourcePriority) return b.sourcePriority - a.sourcePriority;
+    if (a.publishedAt && b.publishedAt) return Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+    if (a.publishedAt) return -1;
+    if (b.publishedAt) return 1;
     return a.title.localeCompare(b.title);
   });
 }
 
-export function clusterEditorialSignals(
-  signals: EditorialSignalItem[],
-): EditorialTopic[] {
+export function clusterEditorialSignals(signals: EditorialSignalItem[]): EditorialTopic[] {
   const topics = new Map<string, EditorialTopic>();
-
   for (const signal of signals) {
     const existing = topics.get(signal.topicKey);
     if (!existing) {
@@ -1079,57 +216,36 @@ export function clusterEditorialSignals(
       });
       continue;
     }
-
     existing.sourceCount += 1;
-    if (!existing.sources.includes(signal.source)) {
-      existing.sources.push(signal.source);
-    }
+    if (!existing.sources.includes(signal.source)) existing.sources.push(signal.source);
     existing.totalEngagement += signal.engagement;
-    for (const tag of signal.topicTags) {
-      if (!existing.topicTags.includes(tag)) {
-        existing.topicTags.push(tag);
-      }
-    }
-    for (const entity of signal.topicEntities) {
-      if (!existing.topicEntities.includes(entity)) {
-        existing.topicEntities.push(entity);
-      }
-    }
-    existing.signalScore = computeSignalScore(
-      Math.max(signal.priority, existing.signalScore),
-      existing.totalEngagement,
-      existing.sourceCount,
-    );
+    existing.signalScore = computeSignalScore(80, existing.totalEngagement, existing.sourceCount);
+    existing.topicTags = unique([...existing.topicTags, ...signal.topicTags]);
+    existing.topicEntities = unique([...existing.topicEntities, ...signal.topicEntities]);
     existing.updatedAt = new Date().toISOString();
   }
-
   return Array.from(topics.values()).sort((a, b) => b.signalScore - a.signalScore);
-}
-
-function computeSignalScore(priority: number, engagement: number, sourceCount: number): number {
-  const engagementScore = Math.min(14, Math.round(Math.log10(Math.max(engagement, 1)) * 4));
-  return Math.round(priority / 5) + sourceCount * 10 + engagementScore;
 }
 
 export function categoryForSignal(title: string, content: string): Category {
   const text = `${title} ${content}`.toLowerCase();
-  if (/\b(bitcoin|btc|ethereum|eth|crypto|etf|sec|cftc|stablecoin)\b/.test(text)) {
-    return "crypto";
-  }
-  if (/\b(openai|gemini|deepmind|llm|model|ai|gpu|tpu)\b/.test(text)) {
+  if (/\b(openai|gemini|deepmind|llm|model|ai|gpu|data center|cloud|semiconductor|chip)\b/.test(text)) {
     return "ai";
   }
   return "us_stocks_macro";
 }
 
+export function buildTopicKey(title: string, entities: string[]): string {
+  if (entities.length > 0) {
+    return entities.slice(0, 2).join("-");
+  }
+  return tokenize(title).slice(0, 3).join("-") || "general";
+}
+
 export function buildTopicClusters(items: FeedItem[]): TopicCluster[] {
   const clusters = new Map<string, TopicCluster>();
-
   for (const item of items) {
-    if (!item.clusterKey) {
-      continue;
-    }
-
+    if (!item.clusterKey) continue;
     const existing = clusters.get(item.clusterKey);
     if (!existing) {
       clusters.set(item.clusterKey, {
@@ -1151,806 +267,131 @@ export function buildTopicClusters(items: FeedItem[]): TopicCluster[] {
       });
       continue;
     }
-
     existing.itemCount += 1;
     if (!existing.sources.includes(item.source)) {
       existing.sources.push(item.source);
       existing.sourceCount += 1;
     }
     existing.totalEditorialScore += item.editorialScore;
-    existing.averageEditorialScore = Math.round(
-      (existing.totalEditorialScore / existing.itemCount) * 10,
-    ) / 10;
+    existing.averageEditorialScore = Math.round((existing.totalEditorialScore / existing.itemCount) * 10) / 10;
     if (existing.topItemIds.length < 3) {
       existing.topItemIds.push(item.id);
       existing.topItemTitles.push(item.title);
     }
-    for (const tag of item.topicTags) {
-      if (!existing.topicTags.includes(tag)) {
-        existing.topicTags.push(tag);
-      }
-    }
-    for (const entity of item.topicEntities) {
-      if (!existing.topicEntities.includes(entity)) {
-        existing.topicEntities.push(entity);
-      }
-    }
+    existing.topicTags = unique([...existing.topicTags, ...item.topicTags]);
+    existing.topicEntities = unique([...existing.topicEntities, ...item.topicEntities]);
   }
 
   return Array.from(clusters.values())
-    .filter((cluster) => {
-      if (cluster.clusterKey.endsWith("|general")) {
-        return cluster.averageEditorialScore >= 85 && cluster.itemCount >= 2;
-      }
-      return cluster.totalEditorialScore >= 90 || cluster.itemCount >= 2;
-    })
+    .filter((cluster) => cluster.itemCount >= 2 || cluster.totalEditorialScore >= 78)
     .sort((a, b) => {
-      const aThemed = a.marketTheme ? 1 : 0;
-      const bThemed = b.marketTheme ? 1 : 0;
-      if (bThemed !== aThemed) {
-        return bThemed - aThemed;
-      }
-      if (b.totalEditorialScore !== a.totalEditorialScore) {
-        return b.totalEditorialScore - a.totalEditorialScore;
-      }
-      if (b.sourceCount !== a.sourceCount) {
-        return b.sourceCount - a.sourceCount;
-      }
+      if (b.totalEditorialScore !== a.totalEditorialScore) return b.totalEditorialScore - a.totalEditorialScore;
+      if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
       return b.itemCount - a.itemCount;
-    })
-    .slice(0, 12);
+    });
 }
 
 export function buildNarrativeBundles(clusters: TopicCluster[]): NarrativeBundle[] {
-  const filtered = clusters
-    .filter((cluster) =>
-      cluster.category === "taiwan_stocks"
-        ? cluster.totalEditorialScore >= 70
-        : cluster.totalEditorialScore >= 100,
-    )
-    .sort((a, b) => b.totalEditorialScore - a.totalEditorialScore);
+  const ranked = [...clusters].sort((a, b) => b.totalEditorialScore - a.totalEditorialScore);
   const visited = new Set<string>();
   const bundles: NarrativeBundle[] = [];
-  const taiwanClusters = filtered.filter((cluster) => cluster.category === "taiwan_stocks");
 
-  const explicitTaiwanGroups: Array<{
-    key: string;
-    title: string;
-    summary: string;
-    angle: string;
-    predicate: (cluster: TopicCluster) => boolean;
-  }> = [
-    {
-      key: "taiwan-ai-supply-chain",
-      title: "台股 AI 供應鏈與資料中心受惠包",
-      summary: "把台廠 AI 供應鏈、半導體、資料中心與受惠鏈條放在一起，才能看出台股本週真正被市場重估的是哪些公司。",
-      angle: "先講受惠鏈條，再講哪些公司被點名，最後補上背後的算力、資料中心與資本支出主線。",
-      predicate: (cluster) =>
-        cluster.topicTags.includes("taiwan_ai_supply_chain") ||
-        cluster.topicTags.includes("taiwan_data_center") ||
-        (cluster.topicTags.includes("taiwan_semis") && cluster.topicTags.includes("ai_infra")),
-    },
-    {
-      key: "taiwan-etf-flows",
-      title: "台股 ETF 與資金輪動包",
-      summary: "把 ETF、配息、高股息與資金輪動題放在一起，才能看出台股資金本週實際往哪裡集中。",
-      angle: "先講資金往哪流，再講哪些產品和族群最受惠。",
-      predicate: (cluster) => cluster.topicTags.includes("taiwan_etf_flows"),
-    },
-    {
-      key: "taiwan-market-macro",
-      title: "台股市場與總經觀察包",
-      summary: "把台股大盤、總經數據、評等與市場情緒放在一起，才能看出台股這週的大方向到底在反映什麼。",
-      angle: "先講台股與總經的結果，再拆背後是景氣、評等、匯率還是外部市場預期在帶動。",
-      predicate: (cluster) =>
-        cluster.topicTags.includes("taiwan_market_story") &&
-        !cluster.topicTags.includes("taiwan_etf_flows") &&
-        !cluster.topicTags.includes("taiwan_ai_supply_chain") &&
-        !cluster.topicTags.includes("taiwan_data_center"),
-    },
-    {
-      key: "taiwan-policy-disclosure",
-      title: "台股政策與公告主線包",
-      summary: "把證交所、櫃買中心、重大訊息與制度更新放在一起，才能看出台股本週的正式揭露主線。",
-      angle: "先講制度或公告，再補上可能影響的公司與產業。",
-      predicate: (cluster) =>
-        (cluster.topicTags.includes("taiwan_policy") || cluster.topicTags.includes("taiwan_admin_notice")) &&
-        !cluster.topicTags.includes("taiwan_etf_flows"),
-    },
-  ];
-
-  for (const group of explicitTaiwanGroups) {
-    const groupClusters = taiwanClusters
-      .filter((cluster) => !visited.has(cluster.clusterKey))
-      .filter(group.predicate)
-      .sort((a, b) => b.totalEditorialScore - a.totalEditorialScore)
-      .slice(0, 4);
-
-    if (groupClusters.length === 0) {
-      continue;
-    }
-
-    if (groupClusters.length < 2 && !canFormStandaloneBundle(groupClusters[0])) {
-      continue;
-    }
-
-    for (const cluster of groupClusters) {
-      visited.add(cluster.clusterKey);
-    }
-
-    const bundle = buildNarrativeBundle(groupClusters);
-    bundles.push({
-      ...bundle,
-      bundleKey: group.key,
-      title: group.title,
-      summary: group.summary,
-      angle: group.angle,
-    });
+  for (const anchor of ranked) {
+    if (visited.has(anchor.clusterKey)) continue;
+    const related = ranked
+      .filter((candidate) => candidate.clusterKey !== anchor.clusterKey && !visited.has(candidate.clusterKey))
+      .filter((candidate) => scoreClusterRelation(anchor, candidate) >= 2)
+      .slice(0, 2);
+    const component = [anchor, ...related];
+    for (const cluster of component) visited.add(cluster.clusterKey);
+    bundles.push(createBundle(component));
   }
 
-  for (const cluster of filtered) {
-    if (visited.has(cluster.clusterKey)) {
-      continue;
-    }
-
-    if (
-      cluster.category === "taiwan_stocks" &&
-      !cluster.topicTags.some((tag) => tag.startsWith("taiwan_"))
-    ) {
-      continue;
-    }
-
-    const related = filtered
-      .filter((candidate) =>
-        candidate.clusterKey !== cluster.clusterKey &&
-        !visited.has(candidate.clusterKey) &&
-        canJoinBundle(cluster, candidate),
-      )
-      .map((candidate) => ({
-        cluster: candidate,
-        score: scoreClusterRelation(cluster, candidate),
-      }))
-      .filter((entry) => entry.score >= 5)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 4)
-      .map((entry) => entry.cluster);
-
-    const component = [cluster, ...related];
-
-    if (component.length < 2 && !canFormStandaloneBundle(cluster)) {
-      continue;
-    }
-
-    visited.add(cluster.clusterKey);
-    for (const relatedCluster of related) {
-      visited.add(relatedCluster.clusterKey);
-    }
-
-    bundles.push(buildNarrativeBundle(component));
-  }
-
-  return bundles
-    .sort((a, b) => {
-      if (b.crossCategory !== a.crossCategory) {
-        return Number(b.crossCategory) - Number(a.crossCategory);
-      }
-      if (b.totalEditorialScore !== a.totalEditorialScore) {
-        return b.totalEditorialScore - a.totalEditorialScore;
-      }
-      return b.sourceCount - a.sourceCount;
-    })
-    .slice(0, 8);
+  return bundles;
 }
 
-function deriveEventType(topicTags: string[], signals: string[]): string | null {
-  if (signals.includes("mega_cap_earnings") || topicTags.includes("earnings")) {
-    return "earnings";
-  }
-  if (signals.includes("strategy_priority") || topicTags.includes("fund_flows")) {
-    return "fund_flows";
-  }
-  if (signals.includes("record_high_major_index") || topicTags.includes("index_move")) {
-    return "index_move";
-  }
-  if (signals.includes("ai_capex_mainline") || topicTags.includes("ai_infra")) {
-    return "capex";
-  }
-  if (topicTags.includes("policy")) {
-    return "policy";
-  }
-  if (topicTags.includes("macro_data")) {
-    return "macro_data";
-  }
-  if (topicTags.includes("price_action")) {
-    return "price_action";
-  }
-  return null;
-}
-
-function scoreClusterRelation(a: TopicCluster, b: TopicCluster): number {
-  let score = 0;
-
-  const sharedEntities = intersectCount(a.topicEntities, b.topicEntities);
-  const sharedTags = intersectCount(a.topicTags, b.topicTags);
-  score += sharedEntities * 3;
-  score += sharedTags * 2;
-
-  if (a.marketTheme && b.marketTheme && a.marketTheme === b.marketTheme) {
-    score += 3;
-  }
-  if (a.eventType && b.eventType && a.eventType === b.eventType) {
-    score += 2;
-  }
-  if (a.category === b.category) {
-    score += 1;
-  }
-
-  const tokenOverlap = intersectCount(tokenize(a.title), tokenize(b.title));
-  if (tokenOverlap >= 2) {
-    score += 2;
-  }
-
-  if (isBigTechAiBridge(a, b)) {
-    score += 4;
-  }
-
-  if (isCryptoMacroBridge(a, b)) {
-    score += 4;
-  }
-
-  if (isCryptoAiBridge(a, b)) {
-    score += 3;
-  }
-
-  if (isTaiwanStoryBridge(a, b)) {
-    score += 4;
-  }
-
-  return score;
-}
-
-function buildNarrativeBundle(component: TopicCluster[]): NarrativeBundle {
-  const ranked = component
-    .slice()
-    .sort((a, b) => b.totalEditorialScore - a.totalEditorialScore);
+function createBundle(clusters: TopicCluster[]): NarrativeBundle {
+  const ranked = [...clusters].sort((a, b) => b.totalEditorialScore - a.totalEditorialScore);
   const anchor = ranked[0];
-  const partitioned = partitionBundleClusters(anchor, ranked);
-  const coreClusters = partitioned.core;
-  const relatedClusters = partitioned.related;
-  const categories = unique(component.map((cluster) => cluster.category));
-  const marketThemes = unique(
-    component.map((cluster) => cluster.marketTheme).filter(Boolean) as string[],
-  );
-  const eventTypes = unique(
-    component.map((cluster) => cluster.eventType).filter(Boolean) as string[],
-  );
-  const entities = unique(component.flatMap((cluster) => cluster.topicEntities));
-  const topicTags = unique(component.flatMap((cluster) => cluster.topicTags));
-  const clusterKeys = ranked.map((cluster) => cluster.clusterKey);
-  const coreClusterKeys = coreClusters.map((cluster) => cluster.clusterKey);
-  const relatedClusterKeys = relatedClusters.map((cluster) => cluster.clusterKey);
-  const coreTopTitles = coreClusters.flatMap((cluster) => cluster.topItemTitles).slice(0, 4);
-  const relatedTopTitles = relatedClusters.flatMap((cluster) => cluster.topItemTitles).slice(0, 4);
-  const topTitles = [...coreTopTitles, ...relatedTopTitles].slice(0, 6);
-  const totalEditorialScore = component.reduce(
-    (sum, cluster) => sum + cluster.totalEditorialScore,
-    0,
-  );
-  const itemCount = component.reduce((sum, cluster) => sum + cluster.itemCount, 0);
-  const sourceCount = unique(component.flatMap((cluster) => cluster.sources)).length;
-  const bundleKind = deriveBundleKind(component, categories, marketThemes, entities, topicTags);
+  const categories = unique(ranked.map((cluster) => cluster.category));
+  const entities = unique(ranked.flatMap((cluster) => cluster.topicEntities));
+  const eventTypes = unique(ranked.map((cluster) => cluster.eventType).filter(Boolean) as string[]);
+  const marketThemes = unique(ranked.map((cluster) => cluster.marketTheme).filter(Boolean) as string[]);
+  const titles = ranked.flatMap((cluster) => cluster.topItemTitles).slice(0, 5);
+  const kind = deriveBundleKind(anchor, marketThemes, entities);
 
   return {
-    bundleKey: bundleKind.key,
-    title: bundleKind.title,
-    summary: bundleKind.summary,
-    angle: bundleKind.angle,
-    whyGrouped: buildWhyGrouped(anchor, coreClusters, relatedClusters),
+    bundleKey: kind.key,
+    title: kind.title,
+    summary: kind.summary,
+    angle: kind.angle,
+    whyGrouped: "Shared company, macro driver, or AI infrastructure theme.",
     categories,
-    coreClusterKeys,
-    relatedClusterKeys,
-    clusterKeys,
+    coreClusterKeys: [anchor.clusterKey],
+    relatedClusterKeys: ranked.slice(1).map((cluster) => cluster.clusterKey),
+    clusterKeys: ranked.map((cluster) => cluster.clusterKey),
     marketThemes,
     eventTypes,
     entities,
-    itemCount,
-    sourceCount,
-    totalEditorialScore,
+    itemCount: ranked.reduce((sum, cluster) => sum + cluster.itemCount, 0),
+    sourceCount: unique(ranked.flatMap((cluster) => cluster.sources)).length,
+    totalEditorialScore: ranked.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0),
     crossCategory: categories.length > 1,
-    coreTopTitles,
-    relatedTopTitles,
-    topTitles,
+    coreTopTitles: anchor.topItemTitles,
+    relatedTopTitles: ranked.slice(1).flatMap((cluster) => cluster.topItemTitles),
+    topTitles: titles,
   };
 }
 
 function deriveBundleKind(
-  component: TopicCluster[],
-  categories: Category[],
+  anchor: TopicCluster,
   marketThemes: string[],
   entities: string[],
-  topicTags: string[],
 ): { key: string; title: string; summary: string; angle: string } {
-  const has = (value: string) => marketThemes.includes(value) || entities.includes(value);
-
-  if (
-    marketThemes.includes("big_tech_earnings") &&
-    (marketThemes.includes("major_index_move") || entities.some((entity) =>
-      ["apple", "microsoft", "alphabet", "amazon", "meta", "nvidia", "intel", "amd", "nokia"].includes(entity),
-    ))
-  ) {
+  if (marketThemes.includes("ai_infra") || entities.some((entity) => ["nvidia", "amd", "dell", "supermicro"].includes(entity))) {
     return {
-      key: "big-tech-earnings-repricing",
-      title: "Big Tech 財報與股價重定價包",
-      summary: "把大型科技股財報、指數反應、贏家輸家分化放在一起，才能看出市場本週真正獎勵的是誰。",
-      angle: "先講財報結果，再講股價與指數怎麼重排順序，最後講哪些公司成了本週的相對贏家與輸家。",
+      key: `ai-infra-${anchor.clusterKey}`,
+      title: "AI infrastructure and hardware demand",
+      summary: "AI server, chip, data-center, and cloud-capex stories are grouped because they affect the same infrastructure trade.",
+      angle: "Explain the concrete company event first, then connect it to AI server or data-center demand.",
     };
   }
-
-  if (categories.length === 1 && categories[0] === "taiwan_stocks") {
-    const aiClusters = component.filter((cluster) =>
-      cluster.topicTags.includes("taiwan_ai_supply_chain") ||
-      cluster.topicTags.includes("taiwan_data_center") ||
-      (cluster.topicTags.includes("taiwan_semis") && cluster.topicTags.includes("ai_infra")),
-    );
-    const etfClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_etf_flows"));
-    const policyClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_policy"));
-    const marketClusters = component.filter((cluster) => cluster.topicTags.includes("taiwan_market_story"));
-    const aiScore = aiClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
-    const etfScore = etfClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
-    const marketScore = marketClusters.reduce((sum, cluster) => sum + cluster.totalEditorialScore, 0);
-
-    if (
-      aiClusters.length >= 2 ||
-      (aiClusters.length >= 1 && aiScore >= etfScore + 40)
-    ) {
-      return {
-        key: "taiwan-ai-supply-chain",
-        title: "台股 AI 供應鏈與資料中心受惠包",
-        summary: "把台廠 AI 供應鏈、半導體、資料中心與受惠鏈條放在一起，才能看出台股本週真正被市場重估的是哪些公司。",
-        angle: "先講受惠鏈條，再講哪些公司被點名，最後補上背後的算力、資料中心與資本支出主線。",
-      };
-    }
-
-    if (etfClusters.length >= 1) {
-      return {
-        key: "taiwan-etf-flows",
-        title: "台股 ETF 與資金輪動包",
-        summary: "把 ETF、配息、高股息與資金輪動題放在一起，才能看出台股資金本週實際往哪裡集中。",
-        angle: "先講資金往哪流，再講哪些產品和族群最受惠。",
-      };
-    }
-
-    if (policyClusters.length >= 1) {
-      return {
-        key: "taiwan-policy-disclosure",
-        title: "台股政策與公告主線包",
-        summary: "把證交所、櫃買中心、重大訊息與制度更新放在一起，才能看出台股本週的正式揭露主線。",
-        angle: "先講制度或公告，再補上可能影響的公司與產業。",
-      };
-    }
-
-    if (marketClusters.length >= 1 && marketScore >= 90) {
-      return {
-        key: "taiwan-market-macro",
-        title: "台股市場與總經觀察包",
-        summary: "把台股大盤、總經數據、評等與市場情緒放在一起，才能看出台股這週的大方向到底在反映什麼。",
-        angle: "先講台股與總經的結果，再拆背後是景氣、評等、匯率還是外部市場預期在帶動。",
-      };
-    }
-  }
-
-  if (
-    marketThemes.includes("big_tech_earnings") &&
-    (marketThemes.includes("ai_capex") || marketThemes.includes("ai_chip_reaction"))
-  ) {
+  if (marketThemes.includes("big_tech_earnings") || entities.some((entity) => ["apple", "microsoft", "alphabet", "amazon", "meta"].includes(entity))) {
     return {
-      key: "big-tech-earnings-ai-spend",
-      title: "Big Tech 財報與 AI 投資驗證包",
-      summary: "把大型科技股財報、AI capex、晶片反應放在一起看，會更容易看出市場到底在獎勵成長、還是在懲罰支出。",
-      angle: "先講誰交出財報，再講市場怎麼用 AI 基建與晶片股反應來重新定價。",
+      key: `big-tech-${anchor.clusterKey}`,
+      title: "Big Tech earnings and mega-cap repricing",
+      summary: "Mega-cap earnings, guidance, and price reaction are grouped to show which companies the market is rewarding.",
+      angle: "Start with the stock reaction and numbers, then explain what changed in expectations.",
     };
   }
-
-  if (
-    marketThemes.includes("major_index_move") &&
-    (marketThemes.includes("big_tech_earnings") || marketThemes.includes("macro_policy"))
-  ) {
+  if (marketThemes.includes("macro_policy") || marketThemes.includes("macro_data")) {
     return {
-      key: "index-move-macro-earnings",
-      title: "指數創高與財報/總經共振包",
-      summary: "這組適合回答為什麼指數在這週創高或轉向，是財報帶動、總經鬆動，還是兩者一起發生。",
-      angle: "把指數表現當結果，再往回拆是財報、利率還是通膨訊號在推動。",
+      key: `macro-${anchor.clusterKey}`,
+      title: "Macro data and rate expectations",
+      summary: "Fed, labor, inflation, and Treasury stories are grouped because they set the risk backdrop for equities.",
+      angle: "State the data or policy event, then explain how it changes rate-cut or risk-appetite expectations.",
     };
   }
-
-  if (
-    marketThemes.includes("strategy_treasury") ||
-    marketThemes.includes("crypto_etf_flows") ||
-    marketThemes.includes("crypto_regulation")
-  ) {
-    return {
-      key: "crypto-flows-structure",
-      title: "Crypto 資金流與制度結構包",
-      summary: "把 ETF 流向、Strategy、穩定幣、監管放在一起，比單看幣價更容易理解本週 crypto 的真正驅動力。",
-      angle: "先講錢往哪裡流，再講制度怎麼改變資金路徑，最後補市場情緒與價格。",
-    };
-  }
-
-  if (
-    categories.includes("crypto") &&
-    (has("sp500") || has("nasdaq") || has("fed") || has("cpi"))
-  ) {
-    return {
-      key: "crypto-macro-linkage",
-      title: "Crypto 與美股總經連動包",
-      summary: "這組能把 BTC/ETH、ETF、風險資產、Fed 或通膨訊號串起來，說清楚 crypto 為什麼不是只受幣圈自己影響。",
-      angle: "用美股和總經做背景，再解釋 crypto 這週的資金和價格為什麼會跟著動。",
-    };
-  }
-
-  if (marketThemes.includes("ai_capex") || marketThemes.includes("ai_chip_reaction")) {
-    return {
-      key: "ai-infra-demand",
-      title: "AI 基建與晶片需求包",
-      summary: "把算力、資料中心、晶片和企業支出訊號包在一起，更容易看出 AI 故事是在擴張還是分化。",
-      angle: "先看支出與基建，再看誰是受益者，最後補市場怎麼重新排序贏家輸家。",
-    };
-  }
-
-  const anchor = component
-    .slice()
-    .sort((a, b) => b.totalEditorialScore - a.totalEditorialScore)[0];
   return {
-    key: `related-${anchor.clusterKey}`,
-    title: `相關主題包：${anchor.title}`,
-    summary: "這些新聞彼此共用同一批公司、資金或政策訊號，合起來看會比單篇閱讀更接近市場真實主線。",
-    angle: "先用最高分主題當主軸，再把相近訊號一併帶進來解釋因果關係。",
+    key: `daily-${anchor.clusterKey}`,
+    title: anchor.title,
+    summary: "Related daily market stories grouped by shared entity or market driver.",
+    angle: "Keep the event concrete and avoid turning it into an over-broad thesis.",
   };
-}
-
-function partitionBundleClusters(
-  anchor: TopicCluster,
-  ranked: TopicCluster[],
-): { core: TopicCluster[]; related: TopicCluster[] } {
-  const core: TopicCluster[] = [anchor];
-  const related: TopicCluster[] = [];
-
-  for (const cluster of ranked.slice(1)) {
-    const relationToAnchor = scoreClusterRelation(anchor, cluster);
-    const sharedEntities = intersectCount(anchor.topicEntities, cluster.topicEntities);
-    const sharedThemes =
-      anchor.marketTheme && cluster.marketTheme && anchor.marketTheme === cluster.marketTheme;
-    const sharedEvents =
-      anchor.eventType && cluster.eventType && anchor.eventType === cluster.eventType;
-
-    if (sharedEntities >= 1 || sharedThemes || sharedEvents || relationToAnchor >= 8) {
-      if (core.length < 3) {
-        core.push(cluster);
-        continue;
-      }
-    }
-
-    related.push(cluster);
-  }
-
-  return { core, related };
-}
-
-function canJoinBundle(anchor: TopicCluster, candidate: TopicCluster): boolean {
-  if (anchor.category === "taiwan_stocks" && candidate.category === "taiwan_stocks") {
-    const anchorIsAi =
-      anchor.topicTags.includes("taiwan_ai_supply_chain") ||
-      anchor.topicTags.includes("taiwan_data_center") ||
-      (anchor.topicTags.includes("taiwan_semis") && anchor.topicTags.includes("ai_infra"));
-    const candidateIsAi =
-      candidate.topicTags.includes("taiwan_ai_supply_chain") ||
-      candidate.topicTags.includes("taiwan_data_center") ||
-      (candidate.topicTags.includes("taiwan_semis") && candidate.topicTags.includes("ai_infra"));
-    const anchorIsEtf = anchor.topicTags.includes("taiwan_etf_flows");
-    const candidateIsEtf = candidate.topicTags.includes("taiwan_etf_flows");
-    const anchorIsPolicy =
-      anchor.topicTags.includes("taiwan_policy") || anchor.topicTags.includes("taiwan_admin_notice");
-    const candidateIsPolicy =
-      candidate.topicTags.includes("taiwan_policy") || candidate.topicTags.includes("taiwan_admin_notice");
-    const anchorIsMarket = anchor.topicTags.includes("taiwan_market_story");
-    const candidateIsMarket = candidate.topicTags.includes("taiwan_market_story");
-    const sharedEntities = intersectCount(anchor.topicEntities, candidate.topicEntities);
-    const anchorHasAiChainTag = anchor.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
-    const candidateHasAiChainTag = candidate.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
-
-    if ((anchorIsAi && candidateIsEtf) || (anchorIsEtf && candidateIsAi)) {
-      return false;
-    }
-
-    if (
-      (anchorIsAi && candidateIsPolicy && !candidateIsAi) ||
-      (candidateIsAi && anchorIsPolicy && !anchorIsAi)
-    ) {
-      return false;
-    }
-
-    if ((anchorIsMarket && candidateIsEtf) || (candidateIsMarket && anchorIsEtf)) {
-      return false;
-    }
-
-    if (
-      ((anchorIsMarket && candidateIsPolicy) || (candidateIsMarket && anchorIsPolicy)) &&
-      sharedEntities === 0
-    ) {
-      return false;
-    }
-
-    if (
-      ((anchorIsMarket && candidateIsAi) || (candidateIsMarket && anchorIsAi)) &&
-      sharedEntities === 0
-    ) {
-      return false;
-    }
-
-    if (((anchorIsAi && !candidateIsAi) || (candidateIsAi && !anchorIsAi)) && sharedEntities === 0) {
-      if ((anchorIsAi && !candidateHasAiChainTag) || (candidateIsAi && !anchorHasAiChainTag)) {
-        return false;
-      }
-    }
-  }
-
-  if (anchor.category === "crypto" && candidate.marketTheme === "big_tech_earnings") {
-    return false;
-  }
-
-  if (
-    anchor.category === "crypto" &&
-    candidate.category === "us_stocks_macro" &&
-    candidate.marketTheme === "major_index_move" &&
-    !anchor.topicEntities.some((entity) => ["sp500", "nasdaq", "fed", "cpi"].includes(entity))
-  ) {
-    return false;
-  }
-
-  if (
-    anchor.category === "us_stocks_macro" &&
-    anchor.marketTheme === "big_tech_earnings" &&
-    candidate.category === "crypto" &&
-    !candidate.topicEntities.some((entity) => ["sp500", "nasdaq"].includes(entity))
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-function buildWhyGrouped(
-  anchor: TopicCluster,
-  coreClusters: TopicCluster[],
-  relatedClusters: TopicCluster[],
-): string {
-  const entityHint = anchor.topicEntities.slice(0, 3).map(labelForEntity).join(" / ");
-  const themeHint = unique(
-    coreClusters
-      .map((cluster) => cluster.marketTheme)
-      .filter(Boolean) as string[],
-  ).join(", ");
-
-  if (relatedClusters.length === 0) {
-    return `主包內的 cluster 共享相同的事件類型或核心實體，主線集中在 ${entityHint || anchor.title}。`;
-  }
-
-  return `主包聚焦 ${entityHint || anchor.title}${themeHint ? `，共同主題是 ${themeHint}` : ""}；關聯包則補充能解釋價格、資金或制度影響的旁支訊號。`;
-}
-
-function isBigTechAiBridge(a: TopicCluster, b: TopicCluster): boolean {
-  const pair = new Set([a.category, b.category]);
-  if (!(pair.has("us_stocks_macro") && pair.has("ai"))) {
-    return false;
-  }
-
-  const themes = [a.marketTheme, b.marketTheme];
-  return themes.includes("big_tech_earnings") &&
-    (themes.includes("ai_capex") || themes.includes("ai_chip_reaction"));
-}
-
-function isCryptoMacroBridge(a: TopicCluster, b: TopicCluster): boolean {
-  const pair = new Set([a.category, b.category]);
-  if (!(pair.has("crypto") && pair.has("us_stocks_macro"))) {
-    return false;
-  }
-
-  const cryptoCluster = a.category === "crypto" ? a : b;
-  const macroCluster = a.category === "us_stocks_macro" ? a : b;
-  const entities = new Set([...a.topicEntities, ...b.topicEntities]);
-
-  const cryptoIsActuallyMacroLinked =
-    cryptoCluster.marketTheme === "price_reaction" ||
-    cryptoCluster.eventType === "index_move" ||
-    ["sp500", "nasdaq", "fed", "cpi"].some((entity) => cryptoCluster.topicEntities.includes(entity));
-
-  const macroIsMarketDriver =
-    ["major_index_move", "macro_policy", "big_tech_earnings"].includes(macroCluster.marketTheme ?? "") ||
-    ["index_move", "earnings", "macro_data"].includes(macroCluster.eventType ?? "");
-
-  return cryptoIsActuallyMacroLinked &&
-    macroIsMarketDriver &&
-    ["sp500", "nasdaq", "fed", "cpi", "bitcoin", "etf"].some((entity) => entities.has(entity));
-}
-
-function isCryptoAiBridge(a: TopicCluster, b: TopicCluster): boolean {
-  const pair = new Set([a.category, b.category]);
-  if (!(pair.has("crypto") && pair.has("ai"))) {
-    return false;
-  }
-
-  const entities = new Set([...a.topicEntities, ...b.topicEntities]);
-  const themes = [a.marketTheme, b.marketTheme];
-  return (
-    themes.includes("ai_capex") ||
-    themes.includes("ai_chip_reaction")
-  ) && ["nvidia", "amd", "intel", "bitcoin"].some((entity) => entities.has(entity));
-}
-
-function isTaiwanStoryBridge(a: TopicCluster, b: TopicCluster): boolean {
-  if (!(a.category === "taiwan_stocks" && b.category === "taiwan_stocks")) {
-    return false;
-  }
-
-  const aIsAi =
-    a.topicTags.includes("taiwan_ai_supply_chain") ||
-    a.topicTags.includes("taiwan_data_center") ||
-    (a.topicTags.includes("taiwan_semis") && a.topicTags.includes("ai_infra"));
-  const bIsAi =
-    b.topicTags.includes("taiwan_ai_supply_chain") ||
-    b.topicTags.includes("taiwan_data_center") ||
-    (b.topicTags.includes("taiwan_semis") && b.topicTags.includes("ai_infra"));
-  const aIsEtf = a.topicTags.includes("taiwan_etf_flows");
-  const bIsEtf = b.topicTags.includes("taiwan_etf_flows");
-  const aIsPolicy =
-    a.topicTags.includes("taiwan_policy") || a.topicTags.includes("taiwan_admin_notice");
-  const bIsPolicy =
-    b.topicTags.includes("taiwan_policy") || b.topicTags.includes("taiwan_admin_notice");
-  const aIsMarket = a.topicTags.includes("taiwan_market_story");
-  const bIsMarket = b.topicTags.includes("taiwan_market_story");
-  const sharedEntities = intersectCount(a.topicEntities, b.topicEntities);
-  const aHasAiChainTag = a.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
-  const bHasAiChainTag = b.topicTags.some((tag) => ["taiwan_ai_supply_chain", "taiwan_data_center", "taiwan_semis"].includes(tag));
-
-  if ((aIsAi && bIsEtf) || (aIsEtf && bIsAi)) {
-    return false;
-  }
-
-  if ((aIsAi && bIsPolicy && !bIsAi) || (bIsAi && aIsPolicy && !aIsAi)) {
-    return false;
-  }
-
-  if ((aIsMarket && bIsEtf) || (aIsEtf && bIsMarket)) {
-    return false;
-  }
-
-  if (((aIsMarket && bIsPolicy) || (bIsMarket && aIsPolicy)) && sharedEntities === 0) {
-    return false;
-  }
-
-  if (((aIsMarket && bIsAi) || (bIsMarket && aIsAi)) && sharedEntities === 0) {
-    return false;
-  }
-
-  if (((aIsAi && !bIsAi) || (bIsAi && !aIsAi)) && sharedEntities === 0) {
-    if ((aIsAi && !bHasAiChainTag) || (bIsAi && !aHasAiChainTag)) {
-      return false;
-    }
-  }
-
-  const sharedTaiwanTags = intersectCount(
-    a.topicTags.filter((tag) => tag.startsWith("taiwan_")),
-    b.topicTags.filter((tag) => tag.startsWith("taiwan_")),
-  );
-
-  return sharedTaiwanTags >= 1 || intersectCount(a.topicEntities, b.topicEntities) >= 1;
-}
-
-function canFormStandaloneBundle(cluster: TopicCluster): boolean {
-  if (cluster.category !== "taiwan_stocks") {
-    return false;
-  }
-
-  if (cluster.topicTags.includes("taiwan_admin_notice")) {
-    return false;
-  }
-
-  return (
-    cluster.totalEditorialScore >= 90 &&
-    cluster.topicTags.some((tag) =>
-      ["taiwan_ai_supply_chain", "taiwan_semis", "taiwan_etf_flows", "taiwan_policy", "taiwan_data_center", "taiwan_market_story"].includes(tag),
-    )
-  );
-}
-
-function intersectCount(a: string[], b: string[]): number {
-  const right = new Set(b);
-  return new Set(a).size === 0 ? 0 : Array.from(new Set(a)).filter((value) => right.has(value)).length;
-}
-
-function unique<T>(values: T[]): T[] {
-  return Array.from(new Set(values));
-}
-
-function deriveMajorEntity(topicEntities: string[]): string | null {
-  const priority = [
-    "alphabet",
-    "microsoft",
-    "amazon",
-    "meta",
-    "apple",
-    "nvidia",
-    "intel",
-    "amd",
-    "strategy",
-    "coinbase",
-    "robinhood",
-    "tesla",
-    "stablecoin",
-    "sp500",
-    "nasdaq",
-    "dow",
-    "fed",
-    "cpi",
-    "jobs",
-    "gdp",
-    "bitcoin",
-    "ethereum",
-    "etf",
-  ];
-  for (const entity of priority) {
-    if (topicEntities.includes(entity)) {
-      return entity;
-    }
-  }
-  return topicEntities[0] ?? null;
 }
 
 function deriveMarketTheme(
   category: Category,
-  topicTags: string[],
+  tags: Set<string>,
   majorEntity: string | null,
   eventType: string | null,
 ): string | null {
-  if (category === "us_stocks_macro") {
-    if (eventType === "earnings" && majorEntity) {
-      return "big_tech_earnings";
-    }
-    if (eventType === "index_move" || ["sp500", "nasdaq", "dow"].includes(majorEntity ?? "")) {
-      return "major_index_move";
-    }
-    if (eventType === "macro_data" || majorEntity === "fed" || majorEntity === "cpi") {
-      return "macro_policy";
-    }
-  }
-
-  if (category === "ai") {
-    if (eventType === "capex") {
-      return "ai_capex";
-    }
-    if (eventType === "earnings" && majorEntity) {
-      return "ai_big_tech_earnings";
-    }
-    if (majorEntity && ["nvidia", "intel", "amd"].includes(majorEntity)) {
-      return "ai_chip_reaction";
-    }
-  }
-
-  if (category === "crypto") {
-    if (majorEntity === "strategy") {
-      return "strategy_treasury";
-    }
-    if (eventType === "fund_flows" || majorEntity === "etf") {
-      return "crypto_etf_flows";
-    }
-    if (eventType === "policy") {
-      return "crypto_regulation";
-    }
-  }
-
-  if (topicTags.includes("price_action")) {
-    return "price_reaction";
-  }
+  if (category === "ai" || tags.has("ai_infra")) return "ai_infra";
+  if (eventType === "earnings" && majorEntity) return "big_tech_earnings";
+  if (tags.has("macro_policy")) return "macro_policy";
+  if (tags.has("macro_data") || eventType === "macro_data") return "macro_data";
+  if (tags.has("index_move")) return "major_index_move";
+  if (tags.has("price_action")) return "price_reaction";
   return null;
 }
 
@@ -1959,74 +400,48 @@ function buildClusterKey(
   eventType: string | null,
   majorEntity: string | null,
   marketTheme: string | null,
-  topicTags: string[],
+  topicTags: Set<string>,
 ): string {
-  if (!marketTheme && !eventType && !majorEntity) {
-    return "";
-  }
-
-  const fallbackTag = topicTags[0] ?? "general";
-  return [
-    category,
-    marketTheme ?? "theme",
-    eventType ?? "event",
-    majorEntity ?? fallbackTag,
-  ].join("|");
+  const theme = marketTheme ?? eventType ?? [...topicTags][0] ?? "general";
+  return [category, theme, majorEntity ?? "market"].join("|");
 }
 
 function clusterTitle(item: FeedItem): string {
-  if (item.marketTheme === "big_tech_earnings" && item.majorEntity) {
-    return `${labelForEntity(item.majorEntity)} earnings`;
+  if (item.majorEntity && item.marketTheme) {
+    return `${item.majorEntity} / ${item.marketTheme}`;
   }
-  if (item.marketTheme === "major_index_move" && item.majorEntity) {
-    return `${labelForEntity(item.majorEntity)} market move`;
-  }
-  if (item.marketTheme === "ai_capex") {
-    return "AI capex and infrastructure";
-  }
-  if (item.marketTheme === "strategy_treasury") {
-    return "Strategy and institutional bitcoin treasury flows";
-  }
-  if (item.marketTheme === "crypto_etf_flows") {
-    return "Crypto ETF and fund-flow update";
-  }
-  if (item.marketTheme === "crypto_regulation") {
-    return "Crypto regulation and market structure";
-  }
-  if (item.marketTheme === "ai_chip_reaction" && item.majorEntity) {
-    return `${labelForEntity(item.majorEntity)} AI chip reaction`;
-  }
-  if (item.marketTheme === "macro_policy" && item.majorEntity) {
-    return `${labelForEntity(item.majorEntity)} macro update`;
-  }
+  if (item.marketTheme) return item.marketTheme;
   return item.title;
 }
 
-function labelForEntity(entity: string): string {
-  const map: Record<string, string> = {
-    alphabet: "Alphabet",
-    microsoft: "Microsoft",
-    amazon: "Amazon",
-    meta: "Meta",
-    apple: "Apple",
-    nvidia: "Nvidia",
-    intel: "Intel",
-    amd: "AMD",
-    strategy: "Strategy",
-    coinbase: "Coinbase",
-    robinhood: "Robinhood",
-    tesla: "Tesla",
-    stablecoin: "Stablecoin",
-    sp500: "S&P 500",
-    nasdaq: "Nasdaq",
-    dow: "Dow",
-    fed: "Fed",
-    cpi: "CPI",
-    jobs: "Jobs",
-    gdp: "GDP",
-    bitcoin: "Bitcoin",
-    ethereum: "Ethereum",
-    etf: "ETF",
-  };
-  return map[entity] ?? entity;
+function scoreClusterRelation(a: TopicCluster, b: TopicCluster): number {
+  let score = 0;
+  if (a.category === b.category) score += 1;
+  if (a.marketTheme && a.marketTheme === b.marketTheme) score += 2;
+  if (a.eventType && a.eventType === b.eventType) score += 1;
+  score += intersectCount(a.topicEntities, b.topicEntities) * 2;
+  score += intersectCount(a.topicTags, b.topicTags);
+  return score;
+}
+
+function computeSignalScore(priority: number, engagement: number, sourceCount: number): number {
+  const engagementScore = Math.min(18, Math.round(Math.log10(Math.max(engagement, 1)) * 5));
+  return Math.round(priority / 4) + sourceCount * 10 + engagementScore;
+}
+
+function tokenize(input: string): string[] {
+  return input
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+}
+
+function intersectCount(a: string[], b: string[]): number {
+  const bSet = new Set(b);
+  return a.filter((value) => bSet.has(value)).length;
+}
+
+function unique<T>(items: Iterable<T>): T[] {
+  return Array.from(new Set(items));
 }
