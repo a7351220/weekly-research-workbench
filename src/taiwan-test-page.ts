@@ -447,7 +447,7 @@ function renderTaiwanTestPageHtml(): string {
           </div>
           <div>
             <label for="limitPerSource">每來源筆數</label>
-            <input id="limitPerSource" value="30" inputmode="numeric">
+            <input id="limitPerSource" value="50" inputmode="numeric">
           </div>
           <div>
             <label for="newsLimit">新聞上限</label>
@@ -537,8 +537,8 @@ function renderTaiwanTestPageHtml(): string {
       var symbol = el("symbol").value.trim();
       var params = new URLSearchParams();
       params.set("days", clampNumber(el("days").value, 1, 45, 30));
-      params.set("limitPerSource", clampNumber(el("limitPerSource").value, 1, 50, 30));
-      params.set("maxItems", "220");
+      params.set("limitPerSource", clampNumber(el("limitPerSource").value, 1, 50, 50));
+      params.set("maxItems", "300");
       params.set("newsLimit", clampNumber(el("newsLimit").value, 1, 50, 8));
       return "/taiwan/stock/" + encodeURIComponent(symbol) + ".json?" + params.toString();
     }

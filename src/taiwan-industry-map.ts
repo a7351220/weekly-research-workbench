@@ -627,8 +627,8 @@ function unique<T>(items: Iterable<T>): T[] {
 function buildTaiwanNewsUrl(requestUrl: URL): URL {
   const url = new URL(`${requestUrl.origin}/daily/taiwan.json`);
   url.searchParams.set("days", requestUrl.searchParams.get("days") || "30");
-  url.searchParams.set("limitPerSource", requestUrl.searchParams.get("limitPerSource") || "20");
-  url.searchParams.set("maxItems", requestUrl.searchParams.get("maxItems") || "160");
+  url.searchParams.set("limitPerSource", requestUrl.searchParams.get("limitPerSource") || "50");
+  url.searchParams.set("maxItems", requestUrl.searchParams.get("maxItems") || "300");
   const keyword = requestUrl.searchParams.get("keyword");
   if (keyword) url.searchParams.set("keyword", keyword);
   return url;

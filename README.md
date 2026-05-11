@@ -97,6 +97,8 @@ Useful query params:
 - `maxItems`: max returned items, default `120`, max `300`.
 - `newsLimit`: max returned stock-profile news items, default `20`, max `50`.
 
+Stock profile endpoints default to a wider news fetch (`days=30`, `limitPerSource=50`, `maxItems=300`) so company-specific matches are not lost when a third-party source places relevant mentions beyond its first page.
+
 Current Taiwan sources:
 
 - TWSE News — `https://www.twse.com.tw/rwd/zh/news/feed?type=rss`
