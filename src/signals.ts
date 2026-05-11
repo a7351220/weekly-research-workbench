@@ -329,6 +329,11 @@ function parseMaybeDate(input: string): string | null {
   if (!input) {
     return null;
   }
+  if (/^\d{10,13}$/.test(input.trim())) {
+    const numeric = Number(input.trim());
+    const ms = input.trim().length === 10 ? numeric * 1000 : numeric;
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  }
   const parsed = Date.parse(input);
   return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
 }

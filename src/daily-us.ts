@@ -1,4 +1,4 @@
-import { buildNarrativeBundles, buildTopicClusters, enrichWithEditorialSignals, sortDailyItems } from "./editorial";
+import { buildNarrativeBundles, buildTopicClusters, categoryForSignal, enrichWithEditorialSignals, sortDailyItems } from "./editorial";
 import { fetchFeed } from "./rss";
 import { filterEditorialCachePayload, loadEditorialCache, refreshEditorialCache } from "./signals";
 import { SOURCES } from "./sources";
@@ -31,6 +31,16 @@ interface FmpStockNewsRow {
   site?: string;
   publisher?: string;
   url?: string;
+}
+
+interface PrivateNewsRow {
+  source: "opennews" | "blockbeats";
+  title: string;
+  content: string;
+  url: string;
+  ts: string;
+  engagement: number;
+  priority: number;
 }
 
 interface QuoteSnapshot {
@@ -172,7 +182,7 @@ export async function handleDailyUs(request: Request, env: Env): Promise<Respons
 }
 
 export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate: string, request?: Request): Promise<DailyUsJsonPayload> {
-  const cacheKey = `daily-us:v10:${reportDate}`;
+  const cacheKey = `daily-us:v11:${reportDate}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
   if (isDailyUsPayload(cached)) {
     return {
@@ -200,13 +210,18 @@ export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate:
   const earningsRadar = earningsNews.items
     .filter((item) => /\b(earnings|results|guidance|quarter|revenue|eps|after hours|before market)\b/i.test(`${item.title} ${item.description}`))
     .slice(0, 5);
-  const stockNews = buildStockNews(datedStockNews.items, usNews.items, filteredAi, earningsRadar, reportDate);
+  const privateNews = await fetchPrivateNewsItems(env, editorialCache, reportDate);
+  const topStories = sortDailyItems([...usNews.items, ...privateNews.us]).slice(0, 60);
+  const topAiRadar = sortDailyItems([...filteredAi, ...privateNews.ai])
+    .filter((item) => isUsAiRadar(item))
+    .slice(0, 6);
+  const stockNews = buildStockNews(datedStockNews.items, topStories, topAiRadar, earningsRadar, reportDate);
 
-  const combinedForGrouping = sortDailyItems([...usNews.items, ...filteredAi, ...earningsRadar]).slice(0, 24);
+  const combinedForGrouping = sortDailyItems([...topStories, ...topAiRadar, ...earningsRadar]).slice(0, 24);
   const topClusters = buildTopicClusters(combinedForGrouping).slice(0, 6);
   const topBundles = buildNarrativeBundles(topClusters).slice(0, 4);
-  const nextSessionWatchlist = buildNextSessionWatchlist(usNews.items, filteredAi, earningsRadar, macroCalendar, indices, assets, megaCaps);
-  const observables = buildObservables(indices, assets, megaCaps, usNews.items);
+  const nextSessionWatchlist = buildNextSessionWatchlist(topStories, topAiRadar, earningsRadar, macroCalendar, indices, assets, megaCaps);
+  const observables = buildObservables(indices, assets, megaCaps, topStories);
   const finalMarketDataStatus = validateQuoteCompleteness(marketDataStatus, indices);
 
   const payload: DailyUsJsonPayload = {
@@ -221,9 +236,9 @@ export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate:
       assets,
       megaCaps,
     },
-    topStories: usNews.items.slice(0, 60),
+    topStories,
     stockNews,
-    topAiRadar: filteredAi,
+    topAiRadar,
     earningsRadar,
     topClusters,
     topBundles,
@@ -231,7 +246,7 @@ export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate:
     nextSessionWatchlist,
     officialCalendars: OFFICIAL_CALENDARS,
     observables,
-    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds, ...earningsNews.failedFeeds, ...datedStockNews.failedFeeds],
+    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds, ...earningsNews.failedFeeds, ...datedStockNews.failedFeeds, ...privateNews.failedFeeds],
   };
 
   const cacheTtl = finalMarketDataStatus.status === "quote_unavailable" ? 60 : 6 * 60 * 60;
@@ -434,6 +449,202 @@ async function fetchSpecificSources(
     }
   }
   return { items: sortDailyItems(items).slice(0, options.maxItems), failedFeeds };
+}
+
+async function fetchPrivateNewsItems(
+  env: Env,
+  editorialCache: EditorialCachePayload | null,
+  reportDate: string,
+): Promise<{ us: FeedItem[]; ai: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
+  const signals = editorialCache?.signals.filter((signal) => signal.source === "opennews" || signal.source === "blockbeats") ?? [];
+  const cachedItems = await Promise.all(
+    signals
+      .filter((signal) => isPrivateSignalInWindow(signal.publishedAt, reportDate))
+      .filter(isDailyPrivateSignal)
+      .map((signal) => privateSignalToFeedItem(signal, editorialCache?.topics ?? [])),
+  );
+  const directOpenNews = await fetchOpenNewsFeedItems(env, editorialCache?.topics ?? [], reportDate);
+  const items = [...cachedItems, ...directOpenNews.items];
+  const dedupe = new Set<string>();
+  const us: FeedItem[] = [];
+  const ai: FeedItem[] = [];
+  for (const item of items.filter((item): item is FeedItem => item !== null)) {
+    const key = normalizeUrl(item.url);
+    if (dedupe.has(key)) continue;
+    dedupe.add(key);
+    if (item.category === "ai") {
+      ai.push(item);
+    } else {
+      us.push(item);
+    }
+  }
+  return {
+    us: sortDailyItems(us).slice(0, 40),
+    ai: sortDailyItems(ai).slice(0, 20),
+    failedFeeds: directOpenNews.failedFeeds,
+  };
+}
+
+async function privateSignalToFeedItem(signal: EditorialCachePayload["signals"][number], topics: EditorialCachePayload["topics"]): Promise<FeedItem | null> {
+  return privateRawNewsToFeedItem(
+    {
+      source: signal.source === "blockbeats" ? "blockbeats" : "opennews",
+      title: signal.title,
+      content: signal.content,
+      url: signal.url,
+      ts: signal.publishedAt ?? "",
+      engagement: signal.engagement,
+      priority: signal.priority,
+    },
+    topics,
+  );
+}
+
+async function fetchOpenNewsFeedItems(
+  env: Env,
+  topics: EditorialCachePayload["topics"],
+  reportDate: string,
+): Promise<{ items: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
+  if (!env.OPENNEWS_TOKEN) {
+    return { items: [], failedFeeds: [] };
+  }
+
+  try {
+    const response = await fetch("https://ai.6551.io/open/news_search", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.OPENNEWS_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ limit: 80, page: 1 }),
+    });
+    if (!response.ok) {
+      return {
+        items: [],
+        failedFeeds: [{ source: "OpenNews", reason: "Fetch failed or non-200 response", status: response.status }],
+      };
+    }
+
+    const data = (await response.json()) as Record<string, unknown>;
+    const rawData = data.data;
+    const rawItems = Array.isArray(rawData)
+      ? rawData
+      : (((rawData as Record<string, unknown> | undefined)?.data ??
+          (rawData as Record<string, unknown> | undefined)?.list ??
+          []) as Array<Record<string, unknown>>);
+    const items = await Promise.all(
+      rawItems
+        .map((item) => ({
+          source: "opennews" as const,
+          title: stringOrEmpty(item.text) || stringOrEmpty(item.title),
+          content: stringOrEmpty(item.description),
+          url: stringOrEmpty(item.link),
+          ts: stringOrEmpty(item.ts),
+          engagement: numberOrZero(item.likes) + numberOrZero(item.score),
+          priority: 84,
+        }))
+        .filter((row) => row.title && row.url)
+        .filter((row) => isPrivateSignalInWindow(normalizePrivateDate(row.ts), reportDate))
+        .filter((row) => isDailyPrivateText(row.title, row.content))
+        .map((row) => privateRawNewsToFeedItem(row, topics)),
+    );
+
+    return {
+      items: sortDailyItems(items.filter((item): item is FeedItem => item !== null)),
+      failedFeeds: [],
+    };
+  } catch (error) {
+    return {
+      items: [],
+      failedFeeds: [{ source: "OpenNews", reason: error instanceof Error ? error.message : "Unknown OpenNews error", status: null }],
+    };
+  }
+}
+
+async function privateRawNewsToFeedItem(row: PrivateNewsRow, topics: EditorialCachePayload["topics"]): Promise<FeedItem | null> {
+  const title = cleanDescription(row.title, 300);
+  const url = normalizeUrl(row.url);
+  if (!title || !url) return null;
+  const description = cleanDescription(row.content || row.title, 500);
+  const date = parseDate(normalizePrivateDate(row.ts));
+  const source = row.source === "opennews" ? "OpenNews" : "BlockBeats";
+  const sourcePriority = row.priority || (row.source === "opennews" ? 84 : 76);
+  const category = categoryForSignal(title, description);
+  const report = computeReportSignals(title, description, "media");
+  return enrichWithEditorialSignals(
+    {
+      id: await createStableId(source, url),
+      source,
+      category,
+      sourceType: "media",
+      sourcePriority,
+      title,
+      url,
+      publishedAt: date.publishedAt,
+      description,
+      rawDescription: row.content || null,
+      matchedKeywords: [],
+      ageHours: date.ageHours,
+      dateQuality: date.dateQuality,
+      reportScore: report.score,
+      reportSignals: report.signals,
+      evidenceScore: 0,
+      substantiationScore: 0,
+      storyValueScore: 0,
+      penaltyScore: 0,
+      sourceQualityScore: 0,
+      corroborationScore: 0,
+      marketReactionScore: 0,
+      editorialScore: 0,
+      editorialSignals: [`private:${row.source}`],
+      topicTags: [],
+      topicEntities: [],
+      crossSourceCount: 0,
+      socialProof: row.engagement,
+      eventType: null,
+      majorEntity: null,
+      marketTheme: null,
+      clusterKey: "",
+    },
+    topics,
+  );
+}
+
+function isPrivateSignalInWindow(publishedAt: string | null, reportDate: string): boolean {
+  if (!publishedAt) return true;
+  const publishedMs = Date.parse(publishedAt);
+  if (!Number.isFinite(publishedMs)) return false;
+  const parts = getZonedDateParts(new Date(publishedMs), "America/New_York");
+  return parts.date >= addUtcDays(reportDate, -1) && parts.date <= addUtcDays(reportDate, 3);
+}
+
+function isDailyPrivateSignal(signal: EditorialCachePayload["signals"][number]): boolean {
+  return isDailyPrivateText(signal.title, signal.content);
+}
+
+function isDailyPrivateText(title: string, content: string): boolean {
+  const text = `${title} ${content}`.toLowerCase();
+  return /\b(s&p|spx|nasdaq|dow jones|russell|fed|fomc|powell|treasury|yield|10-year|rate cut|inflation|cpi|ppi|pce|payroll|jobs|labor market|earnings|revenue|eps|guidance|shares|stock|apple|aapl|microsoft|msft|nvidia|nvda|amazon|amzn|alphabet|google|googl|meta|tesla|tsla|amd|dell|super micro|smci|intel|intc|visa|broadcom|oracle|palantir|coreweave|openai|ai|artificial intelligence|data center|gpu|chip|semiconductor|cloud|capex|inference|tariff|white house|trump|sec)\b/i.test(text);
+}
+
+function normalizePrivateDate(input: string | null): string | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (/^\d{10,13}$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    const ms = trimmed.length === 10 ? numeric * 1000 : numeric;
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? trimmed : new Date(parsed).toISOString();
+}
+
+function stringOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 async function fetchDatedStockNews(
@@ -639,7 +850,7 @@ function isIndividualStockNews(item: FeedItem, reportDate: string, mode: "strict
 }
 
 function isAllowedStockFallbackSource(source: string): boolean {
-  return /^(Yahoo Finance|CNBC Markets|WSJ Markets|WSJ Markets Legacy|Financial Modeling Prep|FMP)\b/i.test(source);
+  return /^(OpenNews|BlockBeats|Yahoo Finance|CNBC Markets|WSJ Markets|WSJ Markets Legacy|Financial Modeling Prep|FMP)\b/i.test(source);
 }
 
 function stockNewsScore(item: FeedItem): number {
