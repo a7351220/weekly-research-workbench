@@ -2,14 +2,6 @@ import type { FeedSource } from "./types";
 
 export const SOURCES: FeedSource[] = [
   {
-    name: "Yahoo Finance",
-    url: "https://finance.yahoo.com/news/rssindex",
-    category: "us_stocks_macro",
-    enabledByDefault: true,
-    priority: 62,
-    sourceType: "media",
-  },
-  {
     name: "CNBC Markets",
     url: "https://www.cnbc.com/id/100003114/device/rss/rss.html",
     category: "us_stocks_macro",

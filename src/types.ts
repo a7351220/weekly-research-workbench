@@ -7,6 +7,7 @@ export interface Env {
   TWITTER_TOKEN?: string;
   ENABLE_PRIVATE_NEWS?: string;
   FMP_API_KEY?: string;
+  ENABLE_FMP_STOCK_NEWS?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_TRANSLATION_MODEL?: string;
   EDITORIAL_CACHE?: CacheStore;

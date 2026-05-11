@@ -208,7 +208,7 @@ export async function handleDailyUs(request: Request, env: Env): Promise<Respons
 
 export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate: string, request?: Request): Promise<DailyUsJsonPayload> {
   const includePrivateNews = shouldFetchPrivateNews(requestUrl, env);
-  const cacheKey = `daily-us:v12:${reportDate}:private-${includePrivateNews ? "1" : "0"}`;
+  const cacheKey = `daily-us:v13:${reportDate}:private-${includePrivateNews ? "1" : "0"}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
   if (isDailyUsPayload(cached)) {
     return {
@@ -865,7 +865,7 @@ async function fetchDatedStockNews(
   env: Env,
   editorialCache: EditorialCachePayload | null,
 ): Promise<{ items: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
-  if (!env.FMP_API_KEY) {
+  if (!env.FMP_API_KEY || env.ENABLE_FMP_STOCK_NEWS !== "true") {
     return { items: [], failedFeeds: [] };
   }
 
