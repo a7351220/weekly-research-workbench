@@ -5,6 +5,7 @@ export interface Env {
   BLOCKBEATS_API_KEY?: string;
   OPENNEWS_TOKEN?: string;
   TWITTER_TOKEN?: string;
+  ENABLE_PRIVATE_NEWS?: string;
   FMP_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_TRANSLATION_MODEL?: string;

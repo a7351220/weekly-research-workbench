@@ -87,5 +87,5 @@ export async function refreshEditorialCacheForRuntime(env: Env): Promise<void> {
 }
 
 export function hasEditorialSecrets(env: Env): boolean {
-  return Boolean(env.BLOCKBEATS_API_KEY || env.OPENNEWS_TOKEN || env.TWITTER_TOKEN);
+  return env.ENABLE_PRIVATE_NEWS === "true" && Boolean(env.BLOCKBEATS_API_KEY || env.OPENNEWS_TOKEN || env.TWITTER_TOKEN);
 }

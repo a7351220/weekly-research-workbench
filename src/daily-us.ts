@@ -153,6 +153,31 @@ const NASDAQ_EARNINGS_SOURCE: FeedSource = {
   articleHosts: ["www.nasdaq.com", "nasdaq.com"],
 };
 
+const SEEKING_ALPHA_EARNINGS_SOURCE: FeedSource = {
+  name: "Seeking Alpha Earnings",
+  url: "https://seekingalpha.com/news/earnings/feed",
+  category: "us_stocks_macro",
+  enabledByDefault: true,
+  priority: 78,
+  sourceType: "media",
+  articleHosts: ["seekingalpha.com", "www.seekingalpha.com"],
+};
+
+const SEEKING_ALPHA_STOCK_SYMBOLS = ["NVDA", "AMD", "MSFT", "GOOGL", "DELL", "SMCI", "AAPL", "AMZN", "META", "TSLA"];
+const TICKERTICK_SYMBOLS = ["aapl", "msft", "nvda", "amzn", "goog", "googl", "meta", "tsla", "amd", "dell", "smci", "intc", "avgo", "orcl", "pltr", "crwv"];
+const TICKERTICK_AI_SYMBOLS = ["nvda", "amd", "dell", "smci", "msft", "goog", "googl", "avgo", "orcl", "pltr", "crwv"];
+
+interface TickerTickStory {
+  id?: string | number;
+  title?: string;
+  description?: string;
+  url?: string;
+  site?: string;
+  time?: number;
+  tags?: string[];
+  tickers?: string[];
+}
+
 export async function handleDailyUs(request: Request, env: Env): Promise<Response> {
   const requestUrl = new URL(request.url);
   const reportDate = resolveReportDate(requestUrl);
@@ -182,7 +207,8 @@ export async function handleDailyUs(request: Request, env: Env): Promise<Respons
 }
 
 export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate: string, request?: Request): Promise<DailyUsJsonPayload> {
-  const cacheKey = `daily-us:v11:${reportDate}`;
+  const includePrivateNews = shouldFetchPrivateNews(requestUrl, env);
+  const cacheKey = `daily-us:v12:${reportDate}:private-${includePrivateNews ? "1" : "0"}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
   if (isDailyUsPayload(cached)) {
     return {
@@ -191,18 +217,22 @@ export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate:
     };
   }
 
-  const editorialCache = await loadDailyEditorialCache(env);
+  const editorialCache = includePrivateNews ? await loadDailyEditorialCache(env) : null;
   const marketDataStatus = getMarketDataStatus(reportDate);
-  const [usNews, aiNews, earningsNews, macroCalendar, datedStockNews] = await Promise.all([
+  const [usNews, aiNews, earningsNews, seekingAlphaStockNews, tickerTickNews, macroCalendar, datedStockNews] = await Promise.all([
     fetchNewsCategory("us_stocks_macro", env, editorialCache, { days: 2, limitPerSource: 20, maxItems: 60 }),
     fetchNewsCategory("ai", env, editorialCache, { days: 3, limitPerSource: 6, maxItems: 12 }),
-    fetchSpecificSources([NASDAQ_EARNINGS_SOURCE], editorialCache, { days: 5, limitPerSource: 6, maxItems: 8 }),
+    fetchSpecificSources([NASDAQ_EARNINGS_SOURCE, SEEKING_ALPHA_EARNINGS_SOURCE], editorialCache, { days: 5, limitPerSource: 6, maxItems: 10 }),
+    fetchSpecificSources(buildSeekingAlphaStockSources(), editorialCache, { days: 5, limitPerSource: 4, maxItems: 36 }),
+    fetchTickerTickNews(reportDate, editorialCache),
     fetchBeaMacroCalendar(),
     fetchDatedStockNews(reportDate, env, editorialCache),
   ]);
   const [indices, assets, megaCaps] = marketDataStatus.isFinal
     ? await fetchDailyQuoteGroups(reportDate, env)
     : [INDEX_QUOTES.map(emptyQuote), ASSET_QUOTES.map(emptyQuote), MEGACAP_QUOTES.map(emptyQuote)];
+  const seekingAlphaStockItems = seekingAlphaStockNews.items.filter(isExternalMarketNews);
+  const tickerTickItems = tickerTickNews.items.filter(isExternalMarketNews);
 
   const filteredAi = aiNews.items
     .filter((item) => isUsAiRadar(item))
@@ -210,12 +240,14 @@ export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate:
   const earningsRadar = earningsNews.items
     .filter((item) => /\b(earnings|results|guidance|quarter|revenue|eps|after hours|before market)\b/i.test(`${item.title} ${item.description}`))
     .slice(0, 5);
-  const privateNews = await fetchPrivateNewsItems(env, editorialCache, reportDate);
-  const topStories = sortDailyItems([...usNews.items, ...privateNews.us]).slice(0, 60);
-  const topAiRadar = sortDailyItems([...filteredAi, ...privateNews.ai])
+  const privateNews = includePrivateNews ? await fetchPrivateNewsItems(env, editorialCache, reportDate) : emptyPrivateNewsItems();
+  const topStories = sortDailyItems([...usNews.items, ...seekingAlphaStockItems, ...tickerTickItems, ...privateNews.us])
+    .filter(isDailyTopStoryCandidate)
+    .slice(0, 60);
+  const topAiRadar = sortDailyItems([...filteredAi, ...tickerTickItems, ...privateNews.ai])
     .filter((item) => isUsAiRadar(item))
     .slice(0, 6);
-  const stockNews = buildStockNews(datedStockNews.items, topStories, topAiRadar, earningsRadar, reportDate);
+  const stockNews = buildStockNews([...datedStockNews.items, ...seekingAlphaStockItems, ...tickerTickItems], topStories, topAiRadar, earningsRadar, reportDate);
 
   const combinedForGrouping = sortDailyItems([...topStories, ...topAiRadar, ...earningsRadar]).slice(0, 24);
   const topClusters = buildTopicClusters(combinedForGrouping).slice(0, 6);
@@ -246,7 +278,7 @@ export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate:
     nextSessionWatchlist,
     officialCalendars: OFFICIAL_CALENDARS,
     observables,
-    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds, ...earningsNews.failedFeeds, ...datedStockNews.failedFeeds, ...privateNews.failedFeeds],
+    failedFeeds: [...usNews.failedFeeds, ...aiNews.failedFeeds, ...earningsNews.failedFeeds, ...seekingAlphaStockNews.failedFeeds, ...tickerTickNews.failedFeeds, ...datedStockNews.failedFeeds, ...privateNews.failedFeeds],
   };
 
   const cacheTtl = finalMarketDataStatus.status === "quote_unavailable" ? 60 : 6 * 60 * 60;
@@ -375,6 +407,157 @@ async function loadDailyEditorialCache(env: Env): Promise<EditorialCachePayload 
     useOpenNews: true,
     useTwitterKols: true,
   });
+}
+
+function shouldFetchPrivateNews(requestUrl: URL, env: Env): boolean {
+  return requestUrl.searchParams.get("privateNews") === "true" || env.ENABLE_PRIVATE_NEWS === "true";
+}
+
+function emptyPrivateNewsItems(): { us: FeedItem[]; ai: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> } {
+  return { us: [], ai: [], failedFeeds: [] };
+}
+
+function buildSeekingAlphaStockSources(): FeedSource[] {
+  return SEEKING_ALPHA_STOCK_SYMBOLS.map((symbol) => ({
+    name: `Seeking Alpha ${symbol}`,
+    url: `https://seekingalpha.com/api/sa/combined/${symbol.toLowerCase()}.xml`,
+    category: "us_stocks_macro",
+    enabledByDefault: true,
+    priority: 76,
+    sourceType: "media",
+    articleHosts: ["seekingalpha.com", "www.seekingalpha.com"],
+  }));
+}
+
+async function fetchTickerTickNews(
+  reportDate: string,
+  editorialCache: EditorialCachePayload | null,
+): Promise<{ items: FeedItem[]; failedFeeds: Array<{ source: string; reason: string; status: number | null }> }> {
+  const symbolQuery = TICKERTICK_SYMBOLS.map((symbol) => `tt:${symbol}`).join(" ");
+  const aiSymbolQuery = TICKERTICK_AI_SYMBOLS.map((symbol) => `tt:${symbol}`).join(" ");
+  const queries = [
+    { label: "TickerTick Curated", q: `(and T:curated (or ${symbolQuery}))`, priority: 84 },
+    { label: "TickerTick Earnings", q: `(and T:earning (or ${symbolQuery}))`, priority: 82 },
+    { label: "TickerTick AI Infrastructure", q: `(and T:industry (or ${aiSymbolQuery}))`, priority: 80 },
+  ];
+
+  const failedFeeds: Array<{ source: string; reason: string; status: number | null }> = [];
+  const allItems: FeedItem[] = [];
+
+  for (const query of queries) {
+    const url = new URL("https://api.tickertick.com/feed");
+    url.searchParams.set("q", query.q);
+    url.searchParams.set("n", "30");
+    try {
+      const response = await fetch(url.toString(), {
+        headers: {
+          "user-agent": "us-daily-market-report/1.0",
+          accept: "application/json,text/plain,*/*",
+        },
+      });
+      if (!response.ok) {
+        failedFeeds.push({ source: query.label, reason: "Fetch failed or non-200 response", status: response.status });
+        continue;
+      }
+      const payload = await response.json() as { stories?: TickerTickStory[] } | TickerTickStory[];
+      const stories = Array.isArray(payload) ? payload : (Array.isArray(payload.stories) ? payload.stories : []);
+      const items = await Promise.all(
+        stories
+          .filter((story) => isTickerTickStoryInWindow(story, reportDate))
+          .map((story) => tickerTickStoryToFeedItem(story, query.label, query.priority, editorialCache?.topics ?? [])),
+      );
+      allItems.push(...items.filter((item): item is FeedItem => item !== null));
+    } catch (error) {
+      failedFeeds.push({
+        source: query.label,
+        reason: error instanceof Error ? error.message : "Unknown TickerTick error",
+        status: null,
+      });
+    }
+    await delay(150);
+  }
+
+  const dedupe = new Set<string>();
+  const items = sortDailyItems(allItems)
+    .filter((item) => {
+      const key = normalizeUrl(item.url);
+      if (dedupe.has(key)) return false;
+      dedupe.add(key);
+      return isExternalMarketNews(item);
+    })
+    .slice(0, 40);
+
+  return { items, failedFeeds };
+}
+
+async function tickerTickStoryToFeedItem(
+  story: TickerTickStory,
+  sourceLabel: string,
+  sourcePriority: number,
+  topics: EditorialCachePayload["topics"],
+): Promise<FeedItem | null> {
+  const title = cleanDescription(story.title ?? "", 300);
+  const url = normalizeUrl(story.url ?? "");
+  if (!title || !url) return null;
+
+  const description = cleanDescription(story.description || story.title || "", 500);
+  const publishedAt = parseDate(normalizeTickerTickTime(story.time));
+  const source = story.site ? `TickerTick ${story.site}` : sourceLabel;
+  const category = categoryForSignal(title, description);
+  const report = computeReportSignals(title, description, "media");
+
+  return enrichWithEditorialSignals(
+    {
+      id: await createStableId(source, url),
+      source,
+      category,
+      sourceType: "media",
+      sourcePriority,
+      title,
+      url,
+      publishedAt: publishedAt.publishedAt,
+      description,
+      rawDescription: story.description ?? null,
+      matchedKeywords: [],
+      ageHours: publishedAt.ageHours,
+      dateQuality: publishedAt.dateQuality,
+      reportScore: report.score,
+      reportSignals: report.signals,
+      evidenceScore: 0,
+      substantiationScore: 0,
+      storyValueScore: 0,
+      penaltyScore: 0,
+      sourceQualityScore: 0,
+      corroborationScore: 0,
+      marketReactionScore: 0,
+      editorialScore: 0,
+      editorialSignals: ["source:ticker_tick", ...(story.tags ?? []).slice(0, 4).map((tag) => `tickertick:${tag}`)],
+      topicTags: [],
+      topicEntities: story.tickers?.slice(0, 6) ?? [],
+      crossSourceCount: 0,
+      socialProof: 0,
+      eventType: null,
+      majorEntity: null,
+      marketTheme: null,
+      clusterKey: "",
+    },
+    topics,
+  );
+}
+
+function isTickerTickStoryInWindow(story: TickerTickStory, reportDate: string): boolean {
+  const publishedAt = normalizeTickerTickTime(story.time);
+  if (!publishedAt) return false;
+  const publishedMs = Date.parse(publishedAt);
+  if (!Number.isFinite(publishedMs)) return false;
+  const parts = getZonedDateParts(new Date(publishedMs), "America/New_York");
+  return parts.date >= reportDate && parts.date <= addUtcDays(reportDate, 3);
+}
+
+function normalizeTickerTickTime(value: number | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const ms = value < 1_000_000_000_000 ? value * 1000 : value;
+  return new Date(ms).toISOString();
 }
 
 async function fetchNewsCategory(
@@ -627,6 +810,36 @@ function isDailyPrivateText(title: string, content: string): boolean {
   return /\b(s&p|spx|nasdaq|dow jones|russell|fed|fomc|powell|treasury|yield|10-year|rate cut|inflation|cpi|ppi|pce|payroll|jobs|labor market|earnings|revenue|eps|guidance|shares|stock|apple|aapl|microsoft|msft|nvidia|nvda|amazon|amzn|alphabet|google|googl|meta|tesla|tsla|amd|dell|super micro|smci|intel|intc|visa|broadcom|oracle|palantir|coreweave|openai|ai|artificial intelligence|data center|gpu|chip|semiconductor|cloud|capex|inference|tariff|white house|trump|sec)\b/i.test(text);
 }
 
+function isExternalMarketNews(item: FeedItem): boolean {
+  const text = `${item.title} ${item.description}`;
+  if (isWeakLifestyleOrAdviceText(text)) return false;
+  const hasCompany = hasTrackedCompany(text);
+  const hasCatalyst = hasMarketCatalystText(text);
+  const hasMarketData = /\b(\$?\d+(?:\.\d+)?\s?(?:%|billion|million|trillion|bps|mw|gw)|q[1-4]|fy\d{4}|revenue|eps|earnings|guidance|shares|stock|price target|market cap)\b/i.test(text);
+  const hasInfrastructureTheme = /\b(ai chip|ai server|ai infrastructure|data center|gpu|semiconductor|custom chip|private credit|financing deal|ipo|capex|cloud)\b/i.test(text);
+  return (hasCompany && (hasCatalyst || hasMarketData)) || hasInfrastructureTheme;
+}
+
+function isDailyTopStoryCandidate(item: FeedItem): boolean {
+  const text = `${item.title} ${item.description}`;
+  if (isWeakLifestyleOrAdviceText(text)) return false;
+  if (/\b(earnings call transcript|earnings call presentation|earnings call highlights|week in review|weekly review|roundup|earnings scoreboard)\b/i.test(text)) return false;
+  const hasMajorMarketContext = /\b(s&p 500|spx|nasdaq|dow jones|russell|fed|fomc|powell|treasury|yield|10-year|rate cut|inflation|cpi|ppi|pce|payroll|jobs|labor market|tariff|white house|trump|oil|dollar|bitcoin|btc|crypto)\b/i.test(text);
+  return hasMajorMarketContext || isExternalMarketNews(item);
+}
+
+function hasTrackedCompany(text: string): boolean {
+  return STOCK_NEWS_PATTERNS.some(([, pattern]) => pattern.test(text));
+}
+
+function hasMarketCatalystText(text: string): boolean {
+  return /\b(earnings|results|guidance|revenue|eps|profit|margin|surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|price target|upgrade|downgrade|deal|deals|partnership|contract|acquisition|investment|equity bet|investigation|lawsuit|white house|trump|tariff|ai server|ai infrastructure|data center|gpu|chip|semiconductor|cloud|capex|inference|financing|ipo|forecast|demand|orders|shipment|production)\b/i.test(text);
+}
+
+function isWeakLifestyleOrAdviceText(text: string): boolean {
+  return /\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger|loading up|you'd invested|start buying|maternity leave|best companies to work|workplace|dating app|movie|streaming guide)\b/i.test(text);
+}
+
 function normalizePrivateDate(input: string | null): string | null {
   if (!input) return null;
   const trimmed = input.trim();
@@ -834,23 +1047,22 @@ function isIndividualStockNews(item: FeedItem, reportDate: string, mode: "strict
   if (mode === "fallback" && !isAllowedStockFallbackSource(item.source)) {
     return false;
   }
-  if (/\b(pre-market earnings report|after-hours earnings report|earnings report for may|most active|daily dividend report)\b/i.test(text)) {
+  if (/\b(pre-market earnings report|after-hours earnings report|earnings report for may|most active|daily dividend report|week in review|weekly review|roundup|earnings scoreboard|earnings call transcript|earnings call presentation)\b/i.test(text)) {
     return false;
   }
   if (/\b(s&p 500|nasdaq 100|dow jones|major indexes|stock market today)\b/i.test(text) && !STOCK_NEWS_PATTERNS.some(([, pattern]) => pattern.test(text))) {
     return false;
   }
-  const hasCompany = STOCK_NEWS_PATTERNS.some(([, pattern]) => pattern.test(text));
-  const hasConcreteCatalyst = /\b(earnings|results|guidance|revenue|eps|profit|margin|surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|price target|upgrade|downgrade|deals?|partnership|contract|acquisition|investment|equity bets?|investigation|lawsuit|white house|trump|tariff|ai server|ai infrastructure|data center|gpu|chip|semiconductor|cloud|capex|inference)\b/i.test(text);
-  const isAdviceFormat = /\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger|loading up|you'd invested|start buying)\b/i.test(text);
-  if (isAdviceFormat) {
+  const hasCompany = hasTrackedCompany(text);
+  const hasConcreteCatalyst = hasMarketCatalystText(text);
+  if (isWeakLifestyleOrAdviceText(text)) {
     return false;
   }
   return hasCompany && hasConcreteCatalyst;
 }
 
 function isAllowedStockFallbackSource(source: string): boolean {
-  return /^(OpenNews|BlockBeats|Yahoo Finance|CNBC Markets|WSJ Markets|WSJ Markets Legacy|Financial Modeling Prep|FMP)\b/i.test(source);
+  return /^(OpenNews|BlockBeats|Yahoo Finance|CNBC Markets|WSJ Markets|WSJ Markets Legacy|Financial Modeling Prep|FMP|TickerTick|Seeking Alpha)\b/i.test(source);
 }
 
 function stockNewsScore(item: FeedItem): number {
