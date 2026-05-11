@@ -94,7 +94,7 @@ export function handleTaiwanSources(): Response {
 
 export async function buildDailyTaiwanPayload(requestUrl: URL, env: Env): Promise<DailyTaiwanPayload> {
   const params = parseTaiwanParams(requestUrl);
-  const cacheKey = `daily-taiwan:v2:${params.reportDate}:days-${params.feedParams.days}:limit-${params.feedParams.limitPerSource}:max-${params.maxItems}:kw-${params.feedParams.keyword || "none"}:sources-${params.selectedSourceIds.join(".") || "default"}`;
+  const cacheKey = `daily-taiwan:v3:${params.reportDate}:days-${params.feedParams.days}:limit-${params.feedParams.limitPerSource}:max-${params.maxItems}:kw-${params.feedParams.keyword || "none"}:sources-${params.selectedSourceIds.join(".") || "default"}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
   if (isDailyTaiwanPayload(cached)) {
     return cached;
@@ -158,7 +158,7 @@ function parseTaiwanParams(requestUrl: URL): {
   maxItems: number;
 } {
   const reportDate = parseReportDate(requestUrl.searchParams.get("date")) || getTaipeiDate();
-  const days = parseNumber(requestUrl.searchParams.get("days"), 3, { min: 1, max: 14 });
+  const days = parseNumber(requestUrl.searchParams.get("days"), 3, { min: 1, max: 45 });
   const limitPerSource = parseNumber(requestUrl.searchParams.get("limitPerSource"), 20, { min: 1, max: 50 });
   const maxItems = parseNumber(requestUrl.searchParams.get("maxItems"), 120, { min: 10, max: 300 });
   const keyword = normalizeKeyword(requestUrl.searchParams.get("keyword"));

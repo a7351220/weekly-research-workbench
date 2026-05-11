@@ -77,22 +77,28 @@ async function fetchStatementDogNewsFeed(
   params: FeedQueryParams,
 ): Promise<FeedFetchResult> {
   try {
-    const response = await fetch(source.url, {
-      headers: {
-        "user-agent": "us-daily-market-report/1.0",
-        "accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-      },
-      cf: {
-        cacheTtl: 300,
-        cacheEverything: false,
-      },
-    });
+    const pages = Math.max(1, Math.min(source.htmlPages ?? 1, 8));
+    const responses = await Promise.all(
+      buildStatementDogNewsUrls(source.url, pages).map(async (url) => {
+        const response = await fetch(url, {
+          headers: {
+            "user-agent": "us-daily-market-report/1.0",
+            "accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+          },
+          cf: {
+            cacheTtl: 300,
+            cacheEverything: false,
+          },
+        });
+        if (!response.ok) {
+          throw new StatementDogFetchError(response.status);
+        }
+        return response.text();
+      }),
+    );
 
-    if (!response.ok) {
-      return failedResult(source, "Fetch failed or non-200 response", response.status);
-    }
-
-    const rawItems = parseStatementDogNewsItems(await response.text()).slice(0, params.limitPerSource);
+    const rawItems = dedupeStatementDogNewsItems(responses.flatMap(parseStatementDogNewsItems))
+      .slice(0, params.limitPerSource);
     const items: FeedItem[] = [];
     for (const rawItem of rawItems) {
       const item = await transformStatementDogNewsItem(rawItem, source, params.keyword);
@@ -107,12 +113,30 @@ async function fetchStatementDogNewsFeed(
       source,
     };
   } catch (error) {
+    if (error instanceof StatementDogFetchError) {
+      return failedResult(source, "Fetch failed or non-200 response", error.status);
+    }
     return failedResult(
       source,
       error instanceof Error ? error.message : "Unknown parsing error",
       null,
     );
   }
+}
+
+class StatementDogFetchError extends Error {
+  constructor(public readonly status: number) {
+    super(`StatementDog fetch failed: ${status}`);
+  }
+}
+
+function buildStatementDogNewsUrls(url: string, pages: number): string[] {
+  return Array.from({ length: pages }, (_, index) => {
+    if (index === 0) return url;
+    const pageUrl = new URL(url);
+    pageUrl.searchParams.set("page", String(index + 1));
+    return pageUrl.toString();
+  });
 }
 
 interface StatementDogRawNewsItem {
@@ -132,15 +156,25 @@ function parseStatementDogNewsItems(html: string): StatementDogRawNewsItem[] {
     seen.add(url);
     const body = match[3] ?? "";
     const date = extractFirst(body, /statementdog-news-list-item-date">\s*([^<]+)\s*</);
-    const description = extractFirst(body, /statementdog-news-list-item-description">\s*([\s\S]*?)\s*<\/p>/) || "";
+    const description = extractFirst(body, /statementdog-news-list-item-description">\s*([\s\S]*?)\s*<\/p>/, 2000) || "";
     items.push({
       title: cleanDescription(match[1], 300),
       url,
       date,
-      description: cleanDescription(description),
+      description: cleanDescription(description, 1400),
     });
   }
   return items;
+}
+
+function dedupeStatementDogNewsItems(items: StatementDogRawNewsItem[]): StatementDogRawNewsItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = normalizeUrl(item.url);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function transformStatementDogNewsItem(
@@ -199,9 +233,9 @@ function normalizeStatementDogDate(value: string | null): string | null {
   return value;
 }
 
-function extractFirst(value: string, pattern: RegExp): string | null {
+function extractFirst(value: string, pattern: RegExp, maxLength = 400): string | null {
   const match = value.match(pattern);
-  return match ? cleanDescription(match[1]) : null;
+  return match ? cleanDescription(match[1], maxLength) : null;
 }
 
 function failedResult(source: FeedSource, reason: string, status: number | null): FeedFetchResult {

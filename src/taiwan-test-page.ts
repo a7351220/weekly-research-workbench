@@ -443,7 +443,7 @@ function renderTaiwanTestPageHtml(): string {
           </div>
           <div>
             <label for="days">回看天數</label>
-            <input id="days" value="7" inputmode="numeric">
+            <input id="days" value="30" inputmode="numeric">
           </div>
           <div>
             <label for="limitPerSource">每來源筆數</label>
@@ -536,7 +536,7 @@ function renderTaiwanTestPageHtml(): string {
     function buildStockUrl() {
       var symbol = el("symbol").value.trim();
       var params = new URLSearchParams();
-      params.set("days", clampNumber(el("days").value, 1, 14, 7));
+      params.set("days", clampNumber(el("days").value, 1, 45, 30));
       params.set("limitPerSource", clampNumber(el("limitPerSource").value, 1, 50, 30));
       params.set("maxItems", "220");
       params.set("newsLimit", clampNumber(el("newsLimit").value, 1, 50, 8));

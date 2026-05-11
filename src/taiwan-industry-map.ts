@@ -563,7 +563,7 @@ function scoreRelatedNews(item: FeedItem, aliases: string[]): RelatedTaiwanNewsI
 
   const genericMarket = isGenericTaiwanMarketStory(title, description);
   if (genericMarket && titleAliases.length === 0) {
-    score -= 52;
+    score -= descriptionAliases.length > 0 && hasCompanyCatalyst(text) ? 20 : 52;
     reasons.push("generic_market_penalty");
   }
   if (isFundOrEtfNews(text) && titleAliases.length === 0) {
@@ -626,7 +626,7 @@ function unique<T>(items: Iterable<T>): T[] {
 
 function buildTaiwanNewsUrl(requestUrl: URL): URL {
   const url = new URL(`${requestUrl.origin}/daily/taiwan.json`);
-  url.searchParams.set("days", requestUrl.searchParams.get("days") || "7");
+  url.searchParams.set("days", requestUrl.searchParams.get("days") || "30");
   url.searchParams.set("limitPerSource", requestUrl.searchParams.get("limitPerSource") || "20");
   url.searchParams.set("maxItems", requestUrl.searchParams.get("maxItems") || "160");
   const keyword = requestUrl.searchParams.get("keyword");

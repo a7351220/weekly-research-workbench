@@ -90,7 +90,7 @@ Taiwan endpoints are independent from the US daily report:
 
 Useful query params:
 
-- `days`: lookback window, default `3`, max `14`.
+- `days`: lookback window, default `3`, max `45`.
 - `limitPerSource`: items fetched per source, default `20`, max `50`.
 - `keyword`: optional keyword filter.
 - `sources`: comma-separated source IDs from `/taiwan/sources.json`.
@@ -103,7 +103,7 @@ Current Taiwan sources:
 - CNA Finance — `https://feeds.feedburner.com/rsscna/finance`
 - CNA Technology — `https://feeds.feedburner.com/rsscna/technology`
 - MoneyDJ Finance News — `https://www.moneydj.com/kmdj/RssCenter.aspx?svc=NW&fno=1&arg=X0000000`
-- StatementDog News — `https://statementdog.com/news/latest`
+- StatementDog News — `https://statementdog.com/news/latest` (HTML parser fetches the latest 5 pages)
 - Cnyes Taiwan Stocks — `https://news.cnyes.com/rss/v1/news/category/tw_stock`
 - UDN Money Industry — `https://money.udn.com/rssfeed/news/1001/5591`
 - StockFeel — `https://www.stockfeel.com.tw/feed/`

@@ -162,6 +162,7 @@ export const TAIWAN_SOURCES: FeedSource[] = [
     priority: 82,
     sourceType: "research",
     parser: "statementdog_news_html",
+    htmlPages: 5,
     articleHosts: ["statementdog.com"],
   },
   {
