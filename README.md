@@ -103,6 +103,10 @@ Current Taiwan sources:
 - CNA Finance — `https://feeds.feedburner.com/rsscna/finance`
 - CNA Technology — `https://feeds.feedburner.com/rsscna/technology`
 - MoneyDJ Finance News — `https://www.moneydj.com/kmdj/RssCenter.aspx?svc=NW&fno=1&arg=X0000000`
+- StatementDog News — `https://statementdog.com/news/latest`
+- Cnyes Taiwan Stocks — `https://news.cnyes.com/rss/v1/news/category/tw_stock`
+- UDN Money Industry — `https://money.udn.com/rssfeed/news/1001/5591`
+- StockFeel — `https://www.stockfeel.com.tw/feed/`
 - DIGITIMES Daily — `https://www.digitimes.com/rss/daily.xml`
 - TechNews Finance — `https://finance.technews.tw/feed/`
 - Business Weekly Investment — `https://www.businessweekly.com.tw/Event/feedsec.aspx?feedid=10&channelid=15`

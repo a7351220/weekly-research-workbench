@@ -27,6 +27,10 @@ export async function fetchFeed(
   source: FeedSource,
   params: FeedQueryParams,
 ): Promise<FeedFetchResult> {
+  if (source.parser === "statementdog_news_html") {
+    return fetchStatementDogNewsFeed(source, params);
+  }
+
   try {
     const response = await fetch(source.url, {
       headers: {
@@ -66,6 +70,138 @@ export async function fetchFeed(
       null,
     );
   }
+}
+
+async function fetchStatementDogNewsFeed(
+  source: FeedSource,
+  params: FeedQueryParams,
+): Promise<FeedFetchResult> {
+  try {
+    const response = await fetch(source.url, {
+      headers: {
+        "user-agent": "us-daily-market-report/1.0",
+        "accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+      },
+      cf: {
+        cacheTtl: 300,
+        cacheEverything: false,
+      },
+    });
+
+    if (!response.ok) {
+      return failedResult(source, "Fetch failed or non-200 response", response.status);
+    }
+
+    const rawItems = parseStatementDogNewsItems(await response.text()).slice(0, params.limitPerSource);
+    const items: FeedItem[] = [];
+    for (const rawItem of rawItems) {
+      const item = await transformStatementDogNewsItem(rawItem, source, params.keyword);
+      if (!item) continue;
+      if (!shouldKeepByDate(item, params.days)) continue;
+      if (params.keyword && item.matchedKeywords.length === 0) continue;
+      items.push(item);
+    }
+
+    return {
+      items: sortFeedItems(items),
+      source,
+    };
+  } catch (error) {
+    return failedResult(
+      source,
+      error instanceof Error ? error.message : "Unknown parsing error",
+      null,
+    );
+  }
+}
+
+interface StatementDogRawNewsItem {
+  title: string;
+  url: string;
+  date: string | null;
+  description: string;
+}
+
+function parseStatementDogNewsItems(html: string): StatementDogRawNewsItem[] {
+  const seen = new Set<string>();
+  const items: StatementDogRawNewsItem[] = [];
+  const matches = html.matchAll(/<a class="statementdog-news-list-item-link" data-title="([^"]+)" href="([^"]+)">([\s\S]*?)<\/a>/g);
+  for (const match of matches) {
+    const url = normalizeUrl(resolveUrl(match[2], "https://statementdog.com/news"));
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const body = match[3] ?? "";
+    const date = extractFirst(body, /statementdog-news-list-item-date">\s*([^<]+)\s*</);
+    const description = extractFirst(body, /statementdog-news-list-item-description">\s*([\s\S]*?)\s*<\/p>/) || "";
+    items.push({
+      title: cleanDescription(match[1], 300),
+      url,
+      date,
+      description: cleanDescription(description),
+    });
+  }
+  return items;
+}
+
+async function transformStatementDogNewsItem(
+  rawItem: StatementDogRawNewsItem,
+  source: FeedSource,
+  keyword: string | null,
+): Promise<FeedItem | null> {
+  if (!rawItem.title || !rawItem.url) return null;
+
+  const dateInfo = parseDate(normalizeStatementDogDate(rawItem.date));
+  const matchedKeywords = computeMatchedKeywords(keyword, rawItem.title, rawItem.description);
+  const report = computeReportSignals(rawItem.title, rawItem.description, source.sourceType);
+
+  return {
+    id: await createStableId(source.name, rawItem.url),
+    source: source.name,
+    category: source.category,
+    sourceType: source.sourceType,
+    sourcePriority: source.priority,
+    title: rawItem.title,
+    url: rawItem.url,
+    publishedAt: dateInfo.publishedAt,
+    description: rawItem.description,
+    rawDescription: rawItem.description,
+    matchedKeywords,
+    ageHours: dateInfo.ageHours,
+    dateQuality: dateInfo.dateQuality,
+    reportScore: report.score,
+    reportSignals: report.signals,
+    evidenceScore: 0,
+    substantiationScore: 0,
+    storyValueScore: 0,
+    penaltyScore: 0,
+    sourceQualityScore: 0,
+    corroborationScore: 0,
+    marketReactionScore: 0,
+    editorialScore: 0,
+    editorialSignals: [],
+    topicTags: [],
+    topicEntities: [],
+    crossSourceCount: 0,
+    socialProof: 0,
+    eventType: null,
+    majorEntity: null,
+    marketTheme: null,
+    clusterKey: "",
+  };
+}
+
+function normalizeStatementDogDate(value: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.trim().replace(/\//g, "-");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return `${normalized}T00:00:00+08:00`;
+  }
+  return value;
+}
+
+function extractFirst(value: string, pattern: RegExp): string | null {
+  const match = value.match(pattern);
+  return match ? cleanDescription(match[1]) : null;
 }
 
 function failedResult(source: FeedSource, reason: string, status: number | null): FeedFetchResult {

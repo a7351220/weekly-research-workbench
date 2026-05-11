@@ -26,6 +26,7 @@ export interface FeedSource {
   enabledByDefault: boolean;
   priority: number;
   sourceType: "official" | "media" | "research";
+  parser?: "rss" | "statementdog_news_html";
   articleHosts?: string[];
 }
 
