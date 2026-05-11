@@ -1,4 +1,4 @@
-export type Category = "us_stocks_macro" | "ai";
+export type Category = "us_stocks_macro" | "ai" | "taiwan_stocks";
 
 export interface Env {
   API_KEY?: string;

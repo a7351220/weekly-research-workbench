@@ -1,5 +1,8 @@
 import { handleDailyUs } from "./daily-us";
 import { handleDailyUsPoster } from "./daily-us-poster";
+import { handleDailyTaiwan, handleTaiwanSources } from "./daily-taiwan";
+import { handleTaiwanIndustryMap, handleTaiwanStockIndustryProfile } from "./taiwan-industry-map";
+import { handleTaiwanTestPage } from "./taiwan-test-page";
 import { OPENAPI_DAILY_YAML } from "./openapi";
 import { refreshEditorialCache } from "./signals";
 import type { Env } from "./types";
@@ -13,6 +16,15 @@ const DAILY_ENDPOINTS = [
   "/daily.html",
   "/daily/us",
   "/daily/us.json",
+  "/daily/taiwan",
+  "/daily/taiwan.json",
+  "/taiwan",
+  "/taiwan.html",
+  "/taiwan/sources.json",
+  "/taiwan/industry-map.json",
+  "/taiwan/stock.json",
+  "/taiwan/stock/{symbol}.json",
+  "/daily/taiwan/sources.json",
   "/daily/us-poster",
   "/daily/us-poster.json",
   "/daily/us-poster.html",
@@ -58,6 +70,19 @@ export async function handleAppRequest(request: Request, env: Env): Promise<Resp
     case "/daily/us":
     case "/daily/us.json":
       return handleDailyUs(request, env);
+    case "/daily/taiwan":
+    case "/daily/taiwan.json":
+      return handleDailyTaiwan(request, env);
+    case "/taiwan":
+    case "/taiwan.html":
+      return handleTaiwanTestPage();
+    case "/taiwan/sources.json":
+    case "/daily/taiwan/sources.json":
+      return handleTaiwanSources();
+    case "/taiwan/industry-map.json":
+      return handleTaiwanIndustryMap(request, env);
+    case "/taiwan/stock.json":
+      return handleTaiwanStockIndustryProfile(request, env);
     case "/daily":
     case "/daily.html":
     case "/daily/us-poster":
@@ -71,6 +96,9 @@ export async function handleAppRequest(request: Request, env: Env): Promise<Resp
     case "/daily/us-calendar.html":
       return handleDailyUsPoster(request, env);
     default:
+      if (/^\/taiwan\/stock\/\d{4,6}(?:\.json)?$/.test(url.pathname)) {
+        return handleTaiwanStockIndustryProfile(request, env);
+      }
       return jsonResponse(
         {
           ok: false,

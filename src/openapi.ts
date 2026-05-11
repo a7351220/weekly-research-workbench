@@ -107,6 +107,70 @@ paths:
                     type: array
                     items:
                       type: string
+  /daily/taiwan.json:
+    get:
+      operationId: getTaiwanDailyResearch
+      summary: Get Taiwan stock research JSON
+      parameters:
+        - in: query
+          name: days
+          required: false
+          schema:
+            type: integer
+            default: 3
+        - in: query
+          name: keyword
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Taiwan stock research payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /taiwan/industry-map.json:
+    get:
+      operationId: getTaiwanIndustryMap
+      summary: Get cached Taiwan industry map from StatementDog
+      parameters:
+        - in: query
+          name: refresh
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Taiwan industry map payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /taiwan/stock.json:
+    get:
+      operationId: getTaiwanStockIndustryProfile
+      summary: Get Taiwan stock industry profile and related news
+      parameters:
+        - in: query
+          name: symbol
+          required: true
+          schema:
+            type: string
+            pattern: '^\\d{4,6}$'
+        - in: query
+          name: days
+          required: false
+          schema:
+            type: integer
+            default: 7
+      responses:
+        '200':
+          description: Taiwan stock industry profile payload
+          content:
+            application/json:
+              schema:
+                type: object
   /daily/us-poster.json:
     get:
       operationId: getUsDailyPosterPayload
