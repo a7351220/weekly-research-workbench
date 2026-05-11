@@ -636,10 +636,16 @@ function isLowContentPosterCandidate(candidate: StoryCandidate): boolean {
   const title = cleanText(candidate.title);
   const summary = cleanText(candidate.summary);
   const summaryIsTitle = !summary || normalizeText(summary) === normalizeText(title);
-  if (/^Seeking Alpha\b/i.test(source) && summaryIsTitle && /\b(preview|back to cash flow|capex bears|stock is pricey|still dipping|buy|cash flow)\b/i.test(title)) {
+  const hasHardNumber = /\$?\d[\d,.]*(?:\.\d+)?\s?(?:%|million|billion|trillion|mn|bn|bps|mw|gw)\b/i.test(title);
+  const hasConcreteEvent = /\b(sources?|report|reported|deal|agreement|contract|partnership|financing|funding|investment|raises?|surged|jumped|fell|results|guidance|revenue|eps|margin|data center|custom chip|ai chip|semiconductor|tariff|fed|cpi|ppi|payrolls|jobs report)\b/i.test(title);
+  const isOpinionOrPreview = /\b(preview|outlook|analysis|thesis|valuation|could|should|why|how|what|is .+ a buy|buy)\b/i.test(title);
+  if (summaryIsTitle && isOpinionOrPreview && !(hasHardNumber && hasConcreteEvent)) {
     return true;
   }
-  if (summaryIsTitle && title.length < 72 && !/\b(?:\$|%|billion|million|trillion|deal|report|sources|financing|data center|chips?|ai)\b/i.test(title)) {
+  if (summaryIsTitle && !hasHardNumber && !hasConcreteEvent) {
+    return true;
+  }
+  if (/^Seeking Alpha\b/i.test(source) && summaryIsTitle && !hasHardNumber) {
     return true;
   }
   return false;
@@ -905,16 +911,29 @@ function formatEarningsCalendarTitle(title: string): string | null {
 function formatMacroCalendarTitle(title: string): string | null {
   const monthYear = title.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/i);
   const suffix = monthYear ? `，${monthYear[2]}年${monthNumber(monthYear[1])}月` : "";
+  const quarterSuffix = formatQuarterSuffix(title);
   if (/Personal Income and Outlays/i.test(title)) return `個人所得與消費支出${suffix}`;
   if (/International Trade in Goods and Services/i.test(title)) return `美國商品與服務國際貿易${suffix}`;
-  if (/GDP|Gross Domestic Product/i.test(title) && /Corporate Profits/i.test(title)) return `GDP 第二次估算與企業獲利，2026年第一季`;
-  if (/GDP|Gross Domestic Product/i.test(title)) return `GDP 國內生產毛額${suffix}`;
-  if (/Corporate Profits/i.test(title)) return `企業獲利${suffix}`;
+  if (/GDP|Gross Domestic Product/i.test(title) && /Corporate Profits/i.test(title)) return `GDP 第二次估算與企業獲利${quarterSuffix || suffix}`;
+  if (/GDP|Gross Domestic Product/i.test(title)) return `GDP 國內生產毛額${quarterSuffix || suffix}`;
+  if (/Corporate Profits/i.test(title)) return `企業獲利${quarterSuffix || suffix}`;
   if (/Consumer Price Index|CPI/i.test(title)) return `CPI 消費者物價指數${suffix}`;
   if (/Producer Price Index|PPI/i.test(title)) return `PPI 生產者物價指數${suffix}`;
   if (/Retail Sales/i.test(title)) return `零售銷售${suffix}`;
   if (/Employment Situation|Payrolls/i.test(title)) return `非農就業 / 就業報告${suffix}`;
   return null;
+}
+
+function formatQuarterSuffix(title: string): string {
+  const year = title.match(/\b(20\d{2})\b/)?.[1];
+  const quarterMatch = title.match(/\b(?:Q([1-4])|([1-4])(?:st|nd|rd|th)\s+Quarter|First Quarter|Second Quarter|Third Quarter|Fourth Quarter)\b/i);
+  if (!year || !quarterMatch) return "";
+  const quarterDigit = quarterMatch[1] || quarterMatch[2];
+  const quarter = quarterDigit
+    ? Number(quarterDigit)
+    : ["first quarter", "second quarter", "third quarter", "fourth quarter"].findIndex((label) => title.toLowerCase().includes(label)) + 1;
+  if (quarter < 1 || quarter > 4) return "";
+  return `，${year}年第${quarter}季`;
 }
 
 async function extractCalendarDate(title: string): Promise<string> {
@@ -1379,40 +1398,6 @@ function formatChineseDate(date: string): string {
   const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return date;
   return `${match[1]}年${Number(match[2])}月${Number(match[3])}日`;
-}
-
-function renderMetricSection(title: string, items: PosterMetric[], className: string): string {
-  return `<section class="panel metric-panel">
-    <div class="section-heading"><h2>${escapeHtml(title)}</h2><span>${items.length} ITEMS</span></div>
-    <div class="${className}">${items.map(renderMetric).join("")}</div>
-  </section>`;
-}
-
-function renderMetric(item: PosterMetric): string {
-  return `<article class="metric ${item.trend}">
-    <p class="label">${escapeHtml(item.label)}</p>
-    <p class="value">${escapeHtml(item.value)}</p>
-    <p class="change">${escapeHtml(item.change)}</p>
-  </article>`;
-}
-
-function renderMegaCap(item: PosterMegaCap): string {
-  return `<article class="mega ${item.trend}">
-    <p class="label">${escapeHtml(item.label)}</p>
-    <p class="ticker">${escapeHtml(item.ticker)}</p>
-    <p class="value">${escapeHtml(item.price)}</p>
-    <p class="change">${escapeHtml(item.change)}</p>
-  </article>`;
-}
-
-function renderStory(item: PosterStory, index: number): string {
-  return `<article class="story">
-    <p class="badge">${index + 1}</p>
-    <h3>${escapeHtml(item.title)}</h3>
-    <p>${escapeHtml(item.summary)}</p>
-    <p class="fact">${escapeHtml(item.fact)}</p>
-    <p class="story-source">${escapeHtml(formatStorySourceLine(item))}</p>
-  </article>`;
 }
 
 function formatStorySourceLine(item: PosterStory): string {
