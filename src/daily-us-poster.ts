@@ -342,12 +342,35 @@ function buildPosterSummarySource(candidate: StoryCandidate): string {
   const summary = cleanText(candidate.summary);
   const title = cleanText(candidate.title);
   if (!summary || summary === "N/A" || normalizeText(summary) === normalizeText(title)) {
-    return "";
+    return buildFallbackSummarySource(candidate);
   }
   if (isLikelyTruncatedText(summary)) {
-    return trimToCompleteBoundary(summary, 170);
+    return trimToCompleteBoundary(summary, 170) || buildFallbackSummarySource(candidate);
   }
-  return trimToCompleteBoundary(summary, 210);
+  return trimToCompleteBoundary(summary, 210) || trimAtWordBoundary(summary, 210);
+}
+
+function buildFallbackSummarySource(candidate: StoryCandidate): string {
+  const title = cleanText(candidate.title);
+  const fact = cleanText(candidate.fact).replace(/^關鍵數字：/, "");
+  if (title.length >= 72 && /(?:\$|%|billion|million|trillion|deal|report|sources|financing|chips?|data center|ai)/i.test(title)) {
+    return trimAtWordBoundary(title.replace(/^Sources?:\s*/i, ""), 210);
+  }
+  if (fact && !/^來源：/.test(fact)) {
+    return trimAtWordBoundary(fact, 180);
+  }
+  return "";
+}
+
+function trimAtWordBoundary(value: string, maxLength: number): string {
+  const text = cleanText(value);
+  if (text.length <= maxLength) return text;
+  const slice = text.slice(0, maxLength);
+  const boundary = Math.max(slice.lastIndexOf(" "), slice.lastIndexOf("，"), slice.lastIndexOf("、"));
+  if (boundary >= 72) {
+    return slice.slice(0, boundary).trim();
+  }
+  return slice.trim();
 }
 
 function trimToCompleteBoundary(value: string, maxLength: number): string {
@@ -600,11 +623,26 @@ function isStrongNewsCandidate(candidate: StoryCandidate): boolean {
   if (isAdministrativeOfficialNotice(candidate)) return false;
   if (isGenericMarketList(candidate.title)) return false;
   if (isEvergreenInvestmentAdviceTitle(candidate.title)) return false;
+  if (isLowContentPosterCandidate(candidate)) return false;
   if (/\b(pre-market earnings report|after-hours earnings report|earnings report for may|earnings call transcript|earnings call presentation|earnings call highlights|week in review|weekly review|roundup|earnings scoreboard)\b/i.test(candidate.title)) return false;
   if (/\b(parloa|gardening tips|future vision film competition|maternity leave|best companies to work|workplace|dating app|movie|streaming guide)\b/i.test(text)) return false;
   if (/\bmost active\b/i.test(text)) return false;
   if (!candidate.url) return false;
   return newsSpecificityFromText(text) >= 18 || /\b(earnings|guidance|revenue|eps|partnership|acquisition|deal|sec|fed|tariff|jobs|payrolls|labor market|data center|chip)\b/i.test(text);
+}
+
+function isLowContentPosterCandidate(candidate: StoryCandidate): boolean {
+  const source = candidate.source || "";
+  const title = cleanText(candidate.title);
+  const summary = cleanText(candidate.summary);
+  const summaryIsTitle = !summary || normalizeText(summary) === normalizeText(title);
+  if (/^Seeking Alpha\b/i.test(source) && summaryIsTitle && /\b(preview|back to cash flow|capex bears|stock is pricey|still dipping|buy|cash flow)\b/i.test(title)) {
+    return true;
+  }
+  if (summaryIsTitle && title.length < 72 && !/\b(?:\$|%|billion|million|trillion|deal|report|sources|financing|data center|chips?|ai)\b/i.test(title)) {
+    return true;
+  }
+  return false;
 }
 
 function isStrongStockNewsCandidate(candidate: StoryCandidate): boolean {
