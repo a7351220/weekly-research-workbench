@@ -1,6 +1,6 @@
 import { buildDailyUsPayload, type DailyUsPayload } from "./daily-us";
 import type { Env, FeedItem } from "./types";
-import { jsonResponse } from "./utils";
+import { jsonResponse, normalizeUrl } from "./utils";
 
 type Trend = "up" | "down" | "flat" | "na";
 type TranslationMode = "openrouter" | "none";
@@ -143,7 +143,7 @@ async function buildPosterPayload(sourcePayload: DailyUsPayload, requestUrl: URL
   const assets = ["vix", "us10y", "dxy", "wti", "gold", "btc"].map((key) => metricFromQuote(findQuote(sourcePayload.marketSummary.assets, key)));
   const megaCaps = ["aapl", "msft", "nvda", "amzn", "googl", "meta", "tsla"].map((key) => megaCapFromQuote(findQuote(sourcePayload.marketSummary.megaCaps, key)));
   const stories = await buildPosterStories(sourcePayload, translator);
-  const stockNews = await buildPosterStockNews(sourcePayload, translator);
+  const stockNews = await buildPosterStockNews(sourcePayload, translator, stories);
   const watchlist = await Promise.all(sourcePayload.nextSessionWatchlist.slice(0, 3).map((item) => translator.headline(item.label || "N/A")));
   const calendarFull = await buildPosterCalendar(sourcePayload, translator, 12);
   const calendar = calendarFull.slice(0, 4);
@@ -267,7 +267,11 @@ async function buildPosterStories(payload: DailyUsPayload, translator: PosterTra
   return stories;
 }
 
-async function buildPosterStockNews(payload: DailyUsPayload, translator: PosterTranslator): Promise<PosterStory[]> {
+async function buildPosterStockNews(
+  payload: DailyUsPayload,
+  translator: PosterTranslator,
+  excludedStories: PosterStory[] = [],
+): Promise<PosterStory[]> {
   const sourceItems = payload.stockNews?.length
     ? payload.stockNews
     : filterItemsForPosterSession([...payload.topStories, ...payload.topAiRadar, ...payload.earningsRadar], payload.reportDate);
@@ -279,9 +283,14 @@ async function buildPosterStockNews(payload: DailyUsPayload, translator: PosterT
     .sort((a, b) => b.score - a.score);
   const stories: PosterStory[] = [];
   const usedTitles = new Set<string>();
+  const excludedUrls = new Set(excludedStories.map((story) => normalizeUrl(story.url || "")).filter(Boolean));
+  const excludedTitles = new Set(excludedStories.map((story) => normalizeText(story.originalTitle || story.title)).filter(Boolean));
 
   for (const candidate of candidates) {
     const normalizedTitle = normalizeText(candidate.title);
+    const normalizedUrl = normalizeUrl(candidate.url || "");
+    if (normalizedUrl && excludedUrls.has(normalizedUrl)) continue;
+    if (normalizedTitle && excludedTitles.has(normalizedTitle)) continue;
     if (usedTitles.has(normalizedTitle)) continue;
     stories.push(await posterStoryFromCandidate(candidate, translator));
     usedTitles.add(normalizedTitle);
