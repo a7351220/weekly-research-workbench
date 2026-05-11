@@ -172,7 +172,7 @@ export async function handleDailyUs(request: Request, env: Env): Promise<Respons
 }
 
 export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate: string, request?: Request): Promise<DailyUsJsonPayload> {
-  const cacheKey = `daily-us:v9:${reportDate}`;
+  const cacheKey = `daily-us:v10:${reportDate}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
   if (isDailyUsPayload(cached)) {
     return {
@@ -264,7 +264,7 @@ function resolvePublicOrigin(requestUrl: URL, request?: Request): string {
 function resolveReportDate(requestUrl: URL): string | null {
   const date = requestUrl.searchParams.get("date");
   if (!date) {
-    return getNewYorkDateString();
+    return getRecommendedCompletedUsSessionDate(getNewYorkClockParts());
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return null;
@@ -562,6 +562,11 @@ const STOCK_NEWS_PATTERNS: Array<[string, RegExp]> = [
   ["DELL", /\b(dell)\b/i],
   ["SMCI", /\b(super micro|supermicro|smci)\b/i],
   ["INTC", /\b(intel|intc)\b/i],
+  ["V", /\b(visa)\b/i],
+  ["AVGO", /\b(broadcom|avgo)\b/i],
+  ["ORCL", /\b(oracle|orcl)\b/i],
+  ["PLTR", /\b(palantir|pltr)\b/i],
+  ["CRWV", /\b(coreweave|crwv)\b/i],
 ];
 
 function buildStockNews(
@@ -571,9 +576,30 @@ function buildStockNews(
   earningsRadar: FeedItem[],
   reportDate: string,
 ): FeedItem[] {
+  const strictCandidates = buildStockNewsCandidates(
+    [...datedStockNews, ...topStories, ...aiRadar, ...earningsRadar],
+    reportDate,
+    "strict",
+  );
+  if (strictCandidates.length > 0) {
+    return strictCandidates.slice(0, 8);
+  }
+
+  return buildStockNewsCandidates(
+    [...topStories, ...aiRadar, ...earningsRadar],
+    reportDate,
+    "fallback",
+  ).slice(0, 8);
+}
+
+function buildStockNewsCandidates(
+  items: FeedItem[],
+  reportDate: string,
+  mode: "strict" | "fallback",
+): FeedItem[] {
   const dedupe = new Set<string>();
-  const candidates = [...datedStockNews, ...topStories, ...aiRadar, ...earningsRadar]
-    .filter((item) => isIndividualStockNews(item, reportDate))
+  return items
+    .filter((item) => isIndividualStockNews(item, reportDate, mode))
     .filter((item) => {
       const key = normalizeUrl(item.url);
       if (dedupe.has(key)) return false;
@@ -581,27 +607,39 @@ function buildStockNews(
       return true;
     })
     .sort((a, b) => stockNewsScore(b) - stockNewsScore(a));
-
-  return candidates.slice(0, 8);
 }
 
-function isIndividualStockNews(item: FeedItem, reportDate: string): boolean {
+function isIndividualStockNews(item: FeedItem, reportDate: string, mode: "strict" | "fallback"): boolean {
   const text = `${item.title} ${item.description}`;
-  if (!isReportSessionItem(item, reportDate)) {
+  if (/^Nasdaq(?:\s|$)/i.test(item.source)) {
+    return false;
+  }
+  if (mode === "strict" && !isReportSessionItem(item, reportDate)) {
+    return false;
+  }
+  if (mode === "fallback" && !isRecentStockFallbackItem(item, reportDate)) {
+    return false;
+  }
+  if (mode === "fallback" && !isAllowedStockFallbackSource(item.source)) {
     return false;
   }
   if (/\b(pre-market earnings report|after-hours earnings report|earnings report for may|most active|daily dividend report)\b/i.test(text)) {
-    return false;
-  }
-  if (/\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger)\b/i.test(text)) {
     return false;
   }
   if (/\b(s&p 500|nasdaq 100|dow jones|major indexes|stock market today)\b/i.test(text) && !STOCK_NEWS_PATTERNS.some(([, pattern]) => pattern.test(text))) {
     return false;
   }
   const hasCompany = STOCK_NEWS_PATTERNS.some(([, pattern]) => pattern.test(text));
-  const hasConcreteCatalyst = /\b(earnings|results|guidance|revenue|eps|profit|margin|surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|price target|upgrade|downgrade|deal|partnership|contract|acquisition|investigation|lawsuit|white house|trump|tariff|ai server|data center|gpu|chip|semiconductor|cloud|capex|inference)\b/i.test(text);
+  const hasConcreteCatalyst = /\b(earnings|results|guidance|revenue|eps|profit|margin|surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|price target|upgrade|downgrade|deals?|partnership|contract|acquisition|investment|equity bets?|investigation|lawsuit|white house|trump|tariff|ai server|ai infrastructure|data center|gpu|chip|semiconductor|cloud|capex|inference)\b/i.test(text);
+  const isAdviceFormat = /\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger|loading up|you'd invested|start buying)\b/i.test(text);
+  if (isAdviceFormat) {
+    return false;
+  }
   return hasCompany && hasConcreteCatalyst;
+}
+
+function isAllowedStockFallbackSource(source: string): boolean {
+  return /^(Yahoo Finance|CNBC Markets|WSJ Markets|WSJ Markets Legacy|Financial Modeling Prep|FMP)\b/i.test(source);
 }
 
 function stockNewsScore(item: FeedItem): number {
@@ -621,6 +659,14 @@ function isReportSessionItem(item: FeedItem, reportDate: string): boolean {
   const parts = getZonedDateParts(new Date(publishedMs), "America/New_York");
   if (parts.date === reportDate) return true;
   return parts.date === addUtcDays(reportDate, 1) && parts.minutesSinceMidnight <= 3 * 60;
+}
+
+function isRecentStockFallbackItem(item: FeedItem, reportDate: string): boolean {
+  if (!item.publishedAt) return false;
+  const publishedMs = Date.parse(item.publishedAt);
+  if (!Number.isFinite(publishedMs)) return false;
+  const parts = getZonedDateParts(new Date(publishedMs), "America/New_York");
+  return parts.date >= reportDate && parts.date <= addUtcDays(reportDate, 3);
 }
 
 function isNewYorkDstDate(date: string): boolean {

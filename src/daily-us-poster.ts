@@ -270,9 +270,9 @@ async function buildPosterStories(payload: DailyUsPayload, translator: PosterTra
 async function buildPosterStockNews(payload: DailyUsPayload, translator: PosterTranslator): Promise<PosterStory[]> {
   const sourceItems = payload.stockNews?.length
     ? payload.stockNews
-    : [...payload.topStories, ...payload.topAiRadar, ...payload.earningsRadar];
+    : filterItemsForPosterSession([...payload.topStories, ...payload.topAiRadar, ...payload.earningsRadar], payload.reportDate);
   const candidates = buildItemStoryCandidates(
-    filterItemsForPosterSession(sourceItems, payload.reportDate),
+    sourceItems,
     payload.reportDate,
   )
     .filter(isStrongStockNewsCandidate)
@@ -610,11 +610,13 @@ function isStrongNewsCandidate(candidate: StoryCandidate): boolean {
 function isStrongStockNewsCandidate(candidate: StoryCandidate): boolean {
   const text = `${candidate.title} ${candidate.summary}`.toLowerCase();
   if (!candidate.url) return false;
+  if (/^Nasdaq(?:\s|$)/i.test(candidate.source || "")) return false;
   if (isBroadMarketRecap(text)) return false;
   if (/\b(pre-market earnings report|after-hours earnings report|earnings report for may|most active)\b/i.test(text)) return false;
-  if (/\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger)\b/i.test(text)) return false;
-  const hasCompany = /\b(apple|aapl|microsoft|msft|nvidia|nvda|amazon|amzn|alphabet|google|googl|meta|tesla|tsla|amd|dell|super micro|supermicro|smci|intel|intc)\b/i.test(text);
-  const hasCatalyst = /\b(earnings|results|guidance|revenue|eps|profit|margin|surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|price target|upgrade|downgrade|deal|partnership|contract|acquisition|investigation|lawsuit|white house|trump|tariff|ai server|data center|gpu|chip|semiconductor|cloud|capex|inference)\b/i.test(text);
+  const hasCompany = /\b(apple|aapl|microsoft|msft|nvidia|nvda|amazon|amzn|alphabet|google|googl|meta|tesla|tsla|amd|dell|super micro|supermicro|smci|intel|intc|visa|broadcom|avgo|oracle|orcl|palantir|pltr|coreweave|crwv)\b/i.test(text);
+  const hasCatalyst = /\b(earnings|results|guidance|revenue|eps|profit|margin|surged|soared|jumped|rallied|fell|dropped|slid|record high|all-time high|price target|upgrade|downgrade|deals?|partnership|contract|acquisition|investment|equity bets?|investigation|lawsuit|white house|trump|tariff|ai server|ai infrastructure|data center|gpu|chip|semiconductor|cloud|capex|inference)\b/i.test(text);
+  const isAdviceFormat = /\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger|loading up|you'd invested|start buying)\b/i.test(text);
+  if (isAdviceFormat) return false;
   return hasCompany && hasCatalyst && newsSpecificityFromText(text) >= 18;
 }
 
