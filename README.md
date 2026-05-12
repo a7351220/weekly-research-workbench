@@ -55,8 +55,9 @@ npm run start
 ## Environment
 
 - `FMP_API_KEY`: historical close data for indices, assets, and mega-cap stocks.
-- `OPENROUTER_API_KEY`: optional Chinese translation for poster story text.
-- `OPENROUTER_TRANSLATION_MODEL`: optional model override.
+- `OPENROUTER_API_KEY`: optional OpenRouter key used by poster translation and Taiwan news classification.
+- `OPENROUTER_TRANSLATION_MODEL`: optional model override for poster translation.
+- `OPENROUTER_CLASSIFICATION_MODEL`: optional model override for Taiwan news classification.
 - `BLOCKBEATS_API_KEY`, `OPENNEWS_TOKEN`, `TWITTER_TOKEN`: optional private signal enrichment used by the daily news ranking layer.
 - `ENABLE_EDITORIAL_SCHEDULER=false`: disable scheduled editorial-cache refresh in the Node runtime.
 
@@ -98,6 +99,7 @@ Useful query params:
 - `sources`: comma-separated source IDs from `/taiwan/sources.json`.
 - `maxItems`: max returned items, default `120`, max `300`.
 - `newsLimit`: max returned stock-profile news items, default `20`, max `50`.
+- `ai`: Taiwan classification mode. Default `1`/`on`. Use `ai=0` or `ai=false` to disable OpenRouter classification and force rules-only fallback.
 
 Stock profile endpoints default to a wider news fetch (`days=30`, `limitPerSource=50`, `maxItems=300`) so company-specific matches are not lost when a third-party source places relevant mentions beyond its first page.
 
@@ -129,6 +131,11 @@ Taiwan stock profile returns two separate news layers:
 
 - `relatedNews`: company-level news that directly matches the stock symbol, company name, or common aliases.
 - `supplyChainNews`: industry or supply-chain news matched from the company's StatementDog industry positions.
+
+`/daily/taiwan(.json)` also returns a `classification` block so you can verify whether the response used:
+
+- `mode: "openrouter"` when AI classification ran successfully.
+- `mode: "rules_only"` when `ai=0`, the API key is missing, or the classifier failed and fell back safely.
 
 StatementDog industry map is cached for 12 hours. The service fetches `/taiex`, then fetches industry detail pages only when the cache expires or `refresh=true` is passed.
 

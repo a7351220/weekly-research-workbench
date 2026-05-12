@@ -1,4 +1,5 @@
 import { buildNarrativeBundles, buildTopicClusters, sortDailyItems } from "./editorial";
+import { classifyTaiwanItemsWithOpenRouter } from "./openrouter-taiwan-classifier";
 import { fetchFeed } from "./rss";
 import { TAIWAN_SOURCES } from "./sources";
 import type { Env, FeedItem, FeedQueryParams, FeedSource } from "./types";
@@ -24,6 +25,16 @@ interface DailyTaiwanPayload {
     limitPerSource: number;
     keyword: string | null;
     selectedSources: string[];
+    ai: "on" | "off";
+  };
+  classification: {
+    enabled: boolean;
+    mode: "rules_only" | "openrouter";
+    model: string | null;
+    classifiedItems: number;
+    usedCache: boolean;
+    failed: boolean;
+    reason: string | null;
   };
   sourceSummary: {
     totalSources: number;
@@ -94,7 +105,7 @@ export function handleTaiwanSources(): Response {
 
 export async function buildDailyTaiwanPayload(requestUrl: URL, env: Env): Promise<DailyTaiwanPayload> {
   const params = parseTaiwanParams(requestUrl);
-  const cacheKey = `daily-taiwan:v3:${params.reportDate}:days-${params.feedParams.days}:limit-${params.feedParams.limitPerSource}:max-${params.maxItems}:kw-${params.feedParams.keyword || "none"}:sources-${params.selectedSourceIds.join(".") || "default"}`;
+  const cacheKey = `daily-taiwan:v4:${params.reportDate}:days-${params.feedParams.days}:limit-${params.feedParams.limitPerSource}:max-${params.maxItems}:kw-${params.feedParams.keyword || "none"}:sources-${params.selectedSourceIds.join(".") || "default"}:ai-${params.aiMode}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
   if (isDailyTaiwanPayload(cached)) {
     return cached;
@@ -111,7 +122,9 @@ export async function buildDailyTaiwanPayload(requestUrl: URL, env: Env): Promis
       status: feed.status,
     }));
   const rawItems = results.flatMap((result) => result.items);
-  const allItems = sortDailyItems(dedupeItems(rawItems.map(enrichTaiwanItem)))
+  const enrichedItems = dedupeItems(rawItems.map(enrichTaiwanItem));
+  const classified = await classifyTaiwanItemsWithOpenRouter(enrichedItems, env, params.aiMode === "on");
+  const allItems = sortDailyItems(classified.items)
     .filter(isUsefulTaiwanItem)
     .slice(0, params.maxItems);
   const topStories = sortTaiwanTopStories(allItems.filter(isTaiwanTopStory)).slice(0, 12);
@@ -131,7 +144,9 @@ export async function buildDailyTaiwanPayload(requestUrl: URL, env: Env): Promis
       limitPerSource: params.feedParams.limitPerSource,
       keyword: params.feedParams.keyword,
       selectedSources: selectedSources.map((source) => source.name),
+      ai: params.aiMode,
     },
+    classification: classified.summary,
     sourceSummary: {
       totalSources: TAIWAN_SOURCES.length,
       activeSources: selectedSources.length,
@@ -156,6 +171,7 @@ function parseTaiwanParams(requestUrl: URL): {
   feedParams: FeedQueryParams;
   selectedSourceIds: string[];
   maxItems: number;
+  aiMode: "on" | "off";
 } {
   const reportDate = parseReportDate(requestUrl.searchParams.get("date")) || getTaipeiDate();
   const days = parseNumber(requestUrl.searchParams.get("days"), 3, { min: 1, max: 45 });
@@ -163,6 +179,7 @@ function parseTaiwanParams(requestUrl: URL): {
   const maxItems = parseNumber(requestUrl.searchParams.get("maxItems"), 120, { min: 10, max: 300 });
   const keyword = normalizeKeyword(requestUrl.searchParams.get("keyword"));
   const selectedSourceIds = parseSourceIds(requestUrl.searchParams.get("sources") || requestUrl.searchParams.get("source"));
+  const aiMode = requestUrl.searchParams.get("ai") === "0" || requestUrl.searchParams.get("ai") === "false" ? "off" : "on";
   return {
     reportDate,
     feedParams: {
@@ -173,6 +190,7 @@ function parseTaiwanParams(requestUrl: URL): {
     },
     selectedSourceIds,
     maxItems,
+    aiMode,
   };
 }
 
@@ -317,12 +335,19 @@ function deriveTaiwanTheme(tags: Set<string>, eventType: string | null): string 
 
 function isUsefulTaiwanItem(item: FeedItem): boolean {
   if (!item.url || !item.title) return false;
+  if (item.aiClassification?.focus === "noise") return false;
   if (item.editorialScore < 38) return false;
   return !LOW_SIGNAL_TAIWAN_PATTERNS.test(`${item.title} ${item.description}`) || item.editorialScore >= 70;
 }
 
 function isTaiwanTopStory(item: FeedItem): boolean {
   const text = `${item.title} ${item.description}`;
+  if (item.aiClassification?.focus === "fund_etf" || item.aiClassification?.focus === "noise") {
+    return false;
+  }
+  if (item.aiClassification?.isTopStory) {
+    return item.editorialScore >= 46 || item.aiClassification.importance >= 70;
+  }
   if (isTaiwanFundOrEtfStory(text)) {
     return false;
   }
@@ -334,6 +359,8 @@ function isTaiwanTopStory(item: FeedItem): boolean {
 
 function isTaiwanStockNews(item: FeedItem): boolean {
   const text = `${item.title} ${item.description}`;
+  if (item.aiClassification?.focus === "fund_etf" || item.aiClassification?.focus === "noise") return false;
+  if (item.aiClassification?.isStockNews || item.aiClassification?.focus === "stock") return true;
   if (isTaiwanFundOrEtfStory(text)) return false;
   return hasExplicitTaiwanCompany(text)
     && (item.editorialScore >= 52 || /營收|財報|法說|股價|漲停|跌停|買超|賣超|目標價|訂單|出貨|供應鏈/i.test(text));
@@ -341,6 +368,8 @@ function isTaiwanStockNews(item: FeedItem): boolean {
 
 function isTaiwanIndustryNews(item: FeedItem): boolean {
   const text = `${item.title} ${item.description}`;
+  if (item.aiClassification?.focus === "fund_etf" || item.aiClassification?.focus === "noise") return false;
+  if (item.aiClassification?.isIndustryNews || item.aiClassification?.focus === "industry") return true;
   if (isTaiwanFundOrEtfStory(text)) return false;
   if (/Yahoo Taiwan Funds News/i.test(item.source)) return false;
   return hasExplicitTaiwanIndustrySignal(text);
@@ -427,11 +456,13 @@ function renderDailyTaiwanHtml(payload: DailyTaiwanPayload): string {
     h1{font-size:42px;margin:0 0 8px;letter-spacing:-.04em}
     h2{font-size:20px;margin:28px 0 12px}
     .meta{color:#666}
+    .submeta{margin-top:8px;color:#666;font-size:13px}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
     article{background:#fff;border:1px solid #d8d0c2;border-radius:14px;padding:14px}
     a{color:#111;text-decoration:none}
     a:hover{text-decoration:underline}
     .source{font-size:12px;color:#777;margin-top:10px}
+    .pill{display:inline-block;margin-left:6px;padding:2px 6px;border-radius:999px;background:#efe9db;color:#6b5f4c;font-size:11px}
     pre{white-space:pre-wrap;overflow:auto;background:#111;color:#eee;border-radius:14px;padding:16px}
   </style>
 </head>
@@ -440,6 +471,7 @@ function renderDailyTaiwanHtml(payload: DailyTaiwanPayload): string {
     <header>
       <h1>台股新聞研究</h1>
       <p class="meta">${escapeHtml(payload.reportDate)} · ${payload.sourceSummary.activeSources}/${payload.sourceSummary.totalSources} sources · ${payload.sourceSummary.totalItems} items</p>
+      <p class="submeta">classification: ${escapeHtml(payload.classification.mode)}${payload.classification.model ? ` · ${escapeHtml(payload.classification.model)}` : ""} · classified ${payload.classification.classifiedItems} · ${escapeHtml(payload.classification.reason || "ok")}</p>
     </header>
     <section>
       <h2>今日主線</h2>
@@ -467,7 +499,7 @@ function renderItem(item: FeedItem): string {
   return `<article>
     <h3><a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a></h3>
     <p>${escapeHtml(item.description || "N/A")}</p>
-    <div class="source">${escapeHtml(item.source)} · score ${Math.round(item.editorialScore)} · ${escapeHtml(item.publishedAt || "date N/A")}</div>
+    <div class="source">${escapeHtml(item.source)} · score ${Math.round(item.editorialScore)} · ${escapeHtml(item.publishedAt || "date N/A")}${item.aiClassification ? ` <span class="pill">ai:${escapeHtml(item.aiClassification.focus)}</span>` : ""}</div>
   </article>`;
 }
 

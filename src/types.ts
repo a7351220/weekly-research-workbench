@@ -10,7 +10,22 @@ export interface Env {
   ENABLE_FMP_STOCK_NEWS?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_TRANSLATION_MODEL?: string;
+  OPENROUTER_CLASSIFICATION_MODEL?: string;
   EDITORIAL_CACHE?: CacheStore;
+}
+
+export interface AiNewsClassification {
+  mode: "openrouter";
+  model: string;
+  focus: "stock" | "industry" | "market" | "macro" | "official" | "fund_etf" | "noise" | "other";
+  importance: number;
+  confidence: number;
+  entities: string[];
+  themes: string[];
+  isTopStory: boolean;
+  isStockNews: boolean;
+  isIndustryNews: boolean;
+  rationale: string;
 }
 
 export interface CacheStore {
@@ -73,6 +88,7 @@ export interface FeedItem {
   majorEntity: string | null;
   marketTheme: string | null;
   clusterKey: string;
+  aiClassification?: AiNewsClassification | null;
 }
 
 export interface FailedFeed {
