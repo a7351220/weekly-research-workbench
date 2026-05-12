@@ -1060,17 +1060,17 @@ function renderPosterHtml(payload: PosterPayload): string {
 function renderPrintHtml(payload: PosterPayload, requestUrl: URL): string {
   const p = payload.poster;
   const autoPrint = requestUrl.searchParams.get("autoprint") === "1";
-  const body = payload.canRender ? renderPrintBody(payload) : renderBlockedBody(payload);
+  const body = payload.canRender ? renderPosterBody(payload) : renderBlockedBody(payload);
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(p.title)} PDF · ${escapeHtml(p.date)}</title>
-  <style>${printPageCss()}</style>
+      <style>${posterCssV3()}${printPosterCssV2()}</style>
 </head>
 <body${autoPrint ? ' data-autoprint="1"' : ""}>
-  <main class="print-sheet" aria-label="${escapeHtml(p.title)} print view">
+  <main class="poster print-poster" aria-label="${escapeHtml(p.title)} print view">
     ${body}
   </main>
   <script>
@@ -1085,6 +1085,318 @@ function renderPrintHtml(payload: PosterPayload, requestUrl: URL): string {
   </script>
 </body>
 </html>`;
+}
+
+function printPosterCssV2(): string {
+  return `
+    :root { color-scheme: only light; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top, rgba(255, 196, 128, 0.18), transparent 32%),
+        linear-gradient(180deg, #f6efe3 0%, #efe4d2 100%);
+      color: #111111;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .print-shell {
+      width: 100%;
+      padding: 32px 20px 40px;
+      box-sizing: border-box;
+    }
+
+    .print-poster {
+      margin: 0 auto;
+    }
+
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 10mm;
+      }
+
+      html,
+      body {
+        background: #f6efe3;
+      }
+
+      .print-shell {
+        padding: 0;
+      }
+
+      .print-poster {
+        width: auto;
+        min-height: auto;
+        margin: 0;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: visible;
+      }
+
+      .print-poster .cover,
+      .print-poster .markets-panel,
+      .print-poster .mega-panel,
+      .print-poster .lead-panel,
+      .print-poster .next-watch {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .print-poster .ticker-strip,
+      .print-poster .stock-news-panel {
+        break-inside: auto;
+        page-break-inside: auto;
+      }
+
+      .print-poster .ticker-strip {
+        overflow: visible;
+      }
+
+      .print-poster .stock-news-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+      }
+
+      .print-poster .stock-news-card,
+      .print-poster .lead-card,
+      .print-poster .calendar-card,
+      .print-poster .mega-card,
+      .print-poster .score-card,
+      .print-poster .asset-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .print-poster .lead-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .print-poster .fact-pill {
+        position: static;
+        margin-top: 14px;
+      }
+
+      .print-poster .next-watch .calendar-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .print-poster .stock-news-headline,
+      .print-poster .stock-news-summary,
+      .print-poster .lead-title,
+      .print-poster .lead-summary,
+      .print-poster .calendar-text {
+        -webkit-line-clamp: unset;
+        overflow: visible;
+        display: block;
+      }
+    }
+  `;
+}
+
+function printPosterCss(): string {
+  return `
+body[data-autoprint="1"]{
+  background:
+    radial-gradient(circle at 15% -10%, rgba(184,133,45,.24), transparent 34%),
+    radial-gradient(circle at 95% 20%, rgba(168,32,34,.18), transparent 32%),
+    linear-gradient(135deg,#211b14,#756858);
+}
+.print-poster{
+  margin:0 auto;
+}
+@media print{
+  @page{size:A4 portrait;margin:12mm}
+  html,body{
+    background:#fff!important;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  .print-poster{
+    width:auto!important;
+    min-height:auto!important;
+    margin:0!important;
+    padding:18px 20px 16px!important;
+    box-shadow:none!important;
+    overflow:visible!important;
+  }
+  .print-poster:before{
+    opacity:.24!important;
+  }
+  .sheet-top,
+  .cover,
+  .tape-board,
+  .stock-news-strip,
+  .lead-stories,
+  .next-watch,
+  .sheet-footer{
+    break-inside:avoid-page;
+    page-break-inside:avoid;
+  }
+  .cover{
+    display:block;
+    padding:18px 0 16px;
+  }
+  .cover h1{
+    max-width:none;
+    font-size:64px;
+    line-height:.9;
+  }
+  .one-line{
+    max-width:none;
+    margin-top:16px;
+    font-size:18px;
+    line-height:1.45;
+  }
+  .scoreboard{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-template-rows:none;
+    margin-top:16px;
+  }
+  .score{
+    border-right:1px solid rgba(248,237,218,.2);
+    border-bottom:0;
+  }
+  .score:last-child{border-right:0}
+  .score strong{
+    font-size:28px;
+  }
+  .score em{
+    font-size:12px;
+  }
+  .score-chart{
+    height:30px;
+    margin-top:10px;
+  }
+  .tape-board{
+    display:block;
+    margin-top:12px;
+  }
+  .tape-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:9px 10px;
+    border-right:0;
+    border-bottom:2px solid var(--rule);
+    writing-mode:horizontal-tb;
+    text-orientation:mixed;
+  }
+  .tape-title strong{
+    margin-top:0;
+    font-size:14px;
+  }
+  .tape-lines{
+    display:grid;
+    gap:8px;
+    margin-top:8px;
+  }
+  .tape-line,
+  .tape-line:first-child,
+  .mega-tape{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    border:1px solid var(--hair);
+  }
+  .tape-item{
+    padding:10px 8px;
+  }
+  .tape-item span{
+    min-height:0;
+  }
+  .mini-chart{
+    height:24px;
+    margin-top:6px;
+  }
+  .stock-news-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-auto-rows:auto;
+    gap:8px;
+    border:0;
+    background:transparent;
+  }
+  .stock-card,
+  .stock-news-empty{
+    min-height:0;
+    height:auto;
+    border:1px solid var(--hair);
+    break-inside:avoid-page;
+    page-break-inside:avoid;
+  }
+  .stock-card:nth-child(4n){border-right:1px solid var(--hair)}
+  .stock-card:nth-last-child(-n + 4){border-bottom:1px solid var(--hair)}
+  .stock-card h3,
+  .stock-card p:not(.stock-card-top),
+  .stock-card em,
+  .lead-story h2,
+  .story-text,
+  .fact-pill{
+    display:block;
+    overflow:visible!important;
+    white-space:normal!important;
+    text-overflow:clip!important;
+    -webkit-line-clamp:unset!important;
+  }
+  .lead-grid{
+    grid-template-columns:1fr;
+    gap:10px;
+    border-top:0;
+    border-bottom:0;
+  }
+  .lead-story{
+    height:auto;
+    min-height:0;
+    padding:18px 16px;
+    border:1px solid var(--rule);
+    break-inside:avoid-page;
+    page-break-inside:avoid;
+  }
+  .story-num{
+    font-size:64px;
+  }
+  .source-line{
+    max-width:none;
+    margin-bottom:10px;
+  }
+  .lead-story h2,
+  .story-1 h2{
+    height:auto;
+    margin-bottom:10px;
+    padding-right:42px;
+    font-size:24px;
+    line-height:1.12;
+  }
+  .story-text{
+    font-size:14px;
+    line-height:1.52;
+  }
+  .fact-pill{
+    position:static;
+    margin-top:12px;
+    padding:8px 10px;
+    border-top:1px solid var(--red);
+    font-size:11px;
+  }
+  .next-watch .calendar-list{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+    border:0;
+    background:transparent;
+  }
+  .calendar-event{
+    min-height:0;
+    border:1px solid var(--hair);
+    break-inside:avoid-page;
+    page-break-inside:avoid;
+  }
+  .calendar-page{
+    min-height:98px;
+  }
+  .calendar-page strong{
+    font-size:30px;
+  }
+}
+`;
 }
 
 function renderPrintBody(payload: PosterPayload): string {
