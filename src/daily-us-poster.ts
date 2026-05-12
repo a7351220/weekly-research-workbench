@@ -1144,6 +1144,7 @@ function printPosterCssV2(): string {
       }
 
       .print-poster .ticker-strip,
+      .print-poster .tape-board,
       .print-poster .stock-news-panel {
         break-inside: auto;
         page-break-inside: auto;
@@ -1151,6 +1152,13 @@ function printPosterCssV2(): string {
 
       .print-poster .ticker-strip {
         overflow: visible;
+      }
+
+      .print-poster .tape-lines,
+      .print-poster .tape-line,
+      .print-poster .mega-tape {
+        break-inside: auto;
+        page-break-inside: auto;
       }
 
       .print-poster .tape-title {
@@ -1288,13 +1296,19 @@ body[data-autoprint="1"]{
   }
   .sheet-top,
   .cover,
-  .tape-board,
   .stock-news-strip,
   .lead-stories,
   .next-watch,
   .sheet-footer{
     break-inside:avoid-page;
     page-break-inside:avoid;
+  }
+  .tape-board,
+  .tape-lines,
+  .tape-line,
+  .mega-tape{
+    break-inside:auto;
+    page-break-inside:auto;
   }
   .cover{
     display:block;
