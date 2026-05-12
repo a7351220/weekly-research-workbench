@@ -5,6 +5,11 @@ interface ClassifiedItem {
   classification: AiNewsClassification;
 }
 
+interface BatchClassificationResult {
+  items: ClassifiedItem[];
+  model: string;
+}
+
 interface TaiwanClassificationResult {
   items: FeedItem[];
   summary: {
@@ -19,6 +24,7 @@ interface TaiwanClassificationResult {
 }
 
 const DEFAULT_MODEL = "mistralai/mistral-nemo";
+const FALLBACK_MODEL = "mistralai/mistral-small-24b-instruct-2501";
 const BATCH_SIZE = 12;
 
 export async function classifyTaiwanItemsWithOpenRouter(
@@ -76,10 +82,12 @@ export async function classifyTaiwanItemsWithOpenRouter(
 
   try {
     const classified: ClassifiedItem[] = [];
+    const usedModels = new Set<string>();
     for (let start = 0; start < items.length; start += BATCH_SIZE) {
       const batch = items.slice(start, start + BATCH_SIZE);
-      const batchItems = await classifyBatch(batch, env, model);
-      classified.push(...batchItems);
+      const batchResult = await classifyBatch(batch, env, model);
+      classified.push(...batchResult.items);
+      usedModels.add(batchResult.model);
     }
     await env.EDITORIAL_CACHE?.put(cacheKey, JSON.stringify(classified), {
       expirationTtl: 60 * 60 * 24 * 7,
@@ -89,7 +97,7 @@ export async function classifyTaiwanItemsWithOpenRouter(
       summary: {
         enabled: true,
         mode: "openrouter",
-        model,
+        model: Array.from(usedModels).join(", ") || model,
         classifiedItems: classified.length,
         usedCache: false,
         failed: false,
@@ -112,53 +120,62 @@ export async function classifyTaiwanItemsWithOpenRouter(
   }
 }
 
-async function classifyBatch(items: FeedItem[], env: Env, model: string): Promise<ClassifiedItem[]> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://weekly-rss-daily.zeabur.app",
-      "X-Title": "weekly-rss-daily taiwan classifier",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      max_tokens: 1600,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "你是台股新聞分類器。只能根據輸入新聞的標題、摘要、來源、日期做判斷，不可補充外部知識。輸出嚴格 JSON：{\"items\":[{\"id\":\"...\",\"focus\":\"stock|industry|market|macro|official|fund_etf|noise|other\",\"importance\":0-100,\"confidence\":0-1,\"entities\":[\"...\"],\"themes\":[\"...\"],\"isTopStory\":true,\"isStockNews\":false,\"isIndustryNews\":false,\"rationale\":\"8字內\"}]}。rationale 只寫極短標籤，例如：公司營收、ETF配息、外資買超、供應鏈擴產。不要解釋規則，不要寫完整句。判斷規則：1) ETF、基金、配息、排行屬於 fund_etf。2) 活動、講座、抽獎、生活、旅遊、房市屬於 noise。3) 明確公司財報、營收、法說、訂單、股價異動屬於 stock。4) 供應鏈、半導體、封裝、PCB、AI 伺服器、記憶體屬於 industry。5) 加權指數、外資、三大法人、成交量屬於 market。6) 匯率、央行、出口、PMI、通膨、利率屬於 macro。7) 證交所、櫃買重大公告且不是ETF時可標 official。8) 盡量讓 isTopStory 只給真正重要的少數項目。",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            items: items.map((item) => ({
-              id: item.id,
-              title: item.title,
-              summary: item.description,
-              source: item.source,
-              publishedAt: item.publishedAt,
-            })),
-          }),
-        },
-      ],
-    }),
-  });
+async function classifyBatch(items: FeedItem[], env: Env, primaryModel: string): Promise<BatchClassificationResult> {
+  const candidateModels = Array.from(new Set([primaryModel, FALLBACK_MODEL].filter(Boolean)));
+  let lastError = "openrouter_empty_classification";
 
-  if (!response.ok) {
-    throw new Error(`openrouter_http_${response.status}`);
+  for (const model of candidateModels) {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://weekly-rss-daily.zeabur.app",
+        "X-Title": "weekly-rss-daily taiwan classifier",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 1600,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是台股新聞分類器。只能根據輸入新聞的標題、摘要、來源、日期做判斷，不可補充外部知識。輸出嚴格 JSON：{\"items\":[{\"id\":\"...\",\"focus\":\"stock|industry|market|macro|official|fund_etf|noise|other\",\"importance\":0-100,\"confidence\":0-1,\"entities\":[\"...\"],\"themes\":[\"...\"],\"isTopStory\":true,\"isStockNews\":false,\"isIndustryNews\":false,\"rationale\":\"8字內\"}]}。rationale 只寫極短標籤，例如：公司營收、ETF配息、外資買超、供應鏈擴產。不要解釋規則，不要寫完整句。判斷規則：1) ETF、基金、配息、排行屬於 fund_etf。2) 活動、講座、抽獎、生活、旅遊、房市屬於 noise。3) 明確公司財報、營收、法說、訂單、股價異動屬於 stock。4) 供應鏈、半導體、封裝、PCB、AI 伺服器、記憶體屬於 industry。5) 加權指數、外資、三大法人、成交量屬於 market。6) 匯率、央行、出口、PMI、通膨、利率屬於 macro。7) 證交所、櫃買重大公告且不是ETF時可標 official。8) 盡量讓 isTopStory 只給真正重要的少數項目。",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              items: items.map((item) => ({
+                id: item.id,
+                title: item.title,
+                summary: item.description,
+                source: item.source,
+                publishedAt: item.publishedAt,
+              })),
+            }),
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      lastError = `openrouter_http_${response.status}`;
+      continue;
+    }
+
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content?.trim() ?? "";
+    const parsed = parseClassifiedItems(content, model);
+    if (parsed.length > 0) {
+      return { items: parsed, model };
+    }
+
+    lastError = "openrouter_empty_classification";
   }
 
-  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-  const content = data.choices?.[0]?.message?.content?.trim() ?? "";
-  const parsed = parseClassifiedItems(content, model);
-  if (parsed.length === 0) {
-    throw new Error("openrouter_empty_classification");
-  }
-  return parsed;
+  throw new Error(lastError);
 }
 
 function parseClassifiedItems(value: string, model: string): ClassifiedItem[] {
