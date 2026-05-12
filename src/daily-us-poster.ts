@@ -1154,11 +1154,17 @@ function printPosterCssV2(): string {
       }
 
       .print-poster .stock-news-grid {
+        display: grid !important;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-rows: auto;
         align-items: stretch;
+        gap: 8px;
+        border: 0;
+        background: transparent;
       }
 
       .print-poster .stock-news-card,
+      .print-poster .stock-card,
       .print-poster .lead-card,
       .print-poster .calendar-card,
       .print-poster .mega-card,
@@ -1170,6 +1176,44 @@ function printPosterCssV2(): string {
 
       .print-poster .lead-grid {
         grid-template-columns: 1fr;
+      }
+
+      .print-poster .stock-card,
+      .print-poster .stock-news-empty {
+        min-height: 0;
+        height: auto;
+        padding: 12px 12px 11px;
+        border: 1px solid var(--hair);
+        overflow: visible;
+      }
+
+      .print-poster .stock-card:nth-child(2n) {
+        border-right: 1px solid var(--hair);
+      }
+
+      .print-poster .stock-card:nth-last-child(-n + 2) {
+        border-bottom: 1px solid var(--hair);
+      }
+
+      .print-poster .stock-card-top,
+      .print-poster .stock-card em {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+      }
+
+      .print-poster .stock-card-top {
+        align-items: flex-start;
+      }
+
+      .print-poster .stock-card h3 {
+        font-size: 19px;
+        line-height: 1.14;
+      }
+
+      .print-poster .stock-card p:not(.stock-card-top) {
+        font-size: 13px;
+        line-height: 1.45;
       }
 
       .print-poster .fact-pill {
