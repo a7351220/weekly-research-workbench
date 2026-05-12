@@ -1153,6 +1153,25 @@ function printPosterCssV2(): string {
         overflow: visible;
       }
 
+      .print-poster .tape-title {
+        display: block;
+        padding: 8px 10px;
+      }
+
+      .print-poster .tape-title span {
+        display: block;
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        white-space: normal;
+      }
+
+      .print-poster .tape-title strong {
+        display: block;
+        margin-top: 4px;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+      }
+
       .print-poster .stock-news-grid {
         display: grid !important;
         grid-template-columns: repeat(2, minmax(0, 1fr));
