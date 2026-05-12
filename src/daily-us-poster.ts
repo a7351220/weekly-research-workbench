@@ -127,6 +127,8 @@ export async function handleDailyUsPoster(request: Request, env: Env): Promise<R
       return jsonResponse(posterPayload);
     case "html":
       return textResponse(renderPosterHtml(posterPayload), "text/html; charset=utf-8");
+    case "print":
+      return textResponse(renderPrintHtml(posterPayload, requestUrl), "text/html; charset=utf-8");
     case "calendar":
       return textResponse(renderCalendarHtml(posterPayload), "text/html; charset=utf-8");
     case "svg":
@@ -1055,6 +1057,80 @@ function renderPosterHtml(payload: PosterPayload): string {
 </html>`;
 }
 
+function renderPrintHtml(payload: PosterPayload, requestUrl: URL): string {
+  const p = payload.poster;
+  const autoPrint = requestUrl.searchParams.get("autoprint") === "1";
+  const body = payload.canRender ? renderPrintBody(payload) : renderBlockedBody(payload);
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(p.title)} PDF · ${escapeHtml(p.date)}</title>
+  <style>${printPageCss()}</style>
+</head>
+<body${autoPrint ? ' data-autoprint="1"' : ""}>
+  <main class="print-sheet" aria-label="${escapeHtml(p.title)} print view">
+    ${body}
+  </main>
+  <script>
+  (() => {
+    if (document.body.dataset.autoprint !== "1") return;
+    const run = async () => {
+      try { await document.fonts?.ready; } catch {}
+      window.setTimeout(() => window.print(), 180);
+    };
+    run();
+  })();
+  </script>
+</body>
+</html>`;
+}
+
+function renderPrintBody(payload: PosterPayload): string {
+  const p = payload.poster;
+  return `<header class="print-header">
+    <div>
+      <p class="eyebrow">${escapeHtml(p.eyebrow)}</p>
+      <h1>${escapeHtml(p.title)}</h1>
+      <p class="print-date">${escapeHtml(formatChineseDate(p.date))}</p>
+    </div>
+    <p class="print-one-line">${escapeHtml(p.oneLine)}</p>
+  </header>
+  <section class="print-section">
+    <h2>市場總覽</h2>
+    <div class="metric-grid">
+      ${p.indices.map((item) => renderPrintMetricCard(item)).join("")}
+      ${p.assets.map((item) => renderPrintMetricCard(item)).join("")}
+    </div>
+  </section>
+  <section class="print-section">
+    <h2>Mega Cap</h2>
+    <div class="mega-grid-print">
+      ${p.megaCaps.map((item) => renderPrintMegaCard(item)).join("")}
+    </div>
+  </section>
+  <section class="print-section">
+    <h2>個股新聞</h2>
+    <div class="print-stock-grid">
+      ${p.stockNews.length ? p.stockNews.map(renderPrintStockCard).join("") : `<article class="print-empty">暫無符合條件的個股新聞。</article>`}
+    </div>
+  </section>
+  <section class="print-section">
+    <h2>今日三條主線</h2>
+    <div class="print-story-list">
+      ${p.stories.map((item, index) => renderPrintLeadCard(item, index)).join("")}
+    </div>
+  </section>
+  <section class="print-section">
+    <h2>重要行事曆</h2>
+    <div class="print-calendar-grid">
+      ${p.calendarFull.length ? p.calendarFull.map(renderPrintCalendarCard).join("") : `<article class="print-empty">暫無可解析的重要事件。</article>`}
+    </div>
+  </section>
+  <footer class="print-footer">${p.footer.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}</footer>`;
+}
+
 function renderCalendarHtml(payload: PosterPayload): string {
   const p = payload.poster;
   const body = payload.canRender ? renderCalendarBody(payload) : renderBlockedBody(payload);
@@ -1248,7 +1324,10 @@ function posterExportScript(): string {
     try {
       if (action === "print-pdf") {
         setStatus("PRINT");
-        window.print();
+        const printUrl = new URL(window.location.origin + "/daily/print");
+        printUrl.searchParams.set("date", date);
+        printUrl.searchParams.set("autoprint", "1");
+        window.open(printUrl.toString(), "_blank", "noopener,noreferrer");
         return;
       }
       const canvas = await renderCanvas();
@@ -1402,6 +1481,53 @@ function renderStockNewsCard(item: PosterStory, index: number): string {
   </article>`;
 }
 
+function renderPrintMetricCard(item: PosterMetric): string {
+  return `<article class="print-metric ${item.trend}">
+    <span>${escapeHtml(item.label)}</span>
+    <strong>${escapeHtml(item.value)}</strong>
+    <em>${escapeHtml(item.change)}</em>
+  </article>`;
+}
+
+function renderPrintMegaCard(item: PosterMegaCap): string {
+  return `<article class="print-mega ${item.trend}">
+    <span>${escapeHtml(item.label)}</span>
+    <small>${escapeHtml(item.ticker)}</small>
+    <strong>${escapeHtml(item.price)}</strong>
+    <em>${escapeHtml(item.change)}</em>
+  </article>`;
+}
+
+function renderPrintStockCard(item: PosterStory, index: number): string {
+  const summary = item.summary.trim();
+  const source = formatStorySourceLine(item);
+  return `<article class="print-stock-card">
+    <p class="print-card-kicker">${String(index + 1).padStart(2, "0")} · ${escapeHtml(source)}</p>
+    <h3>${renderInlineStoryLink(item, item.title)}</h3>
+    ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
+    <em>${escapeHtml(item.fact)}</em>
+  </article>`;
+}
+
+function renderPrintLeadCard(item: PosterStory, index: number): string {
+  const summary = item.summary.trim();
+  const source = formatStorySourceLine(item);
+  return `<article class="print-lead-card">
+    <p class="print-card-kicker">${String(index + 1).padStart(2, "0")} · ${escapeHtml(source)}</p>
+    <h3>${renderInlineStoryLink(item, item.title)}</h3>
+    ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
+    <em>${escapeHtml(item.fact)}</em>
+  </article>`;
+}
+
+function renderPrintCalendarCard(item: PosterCalendarEvent): string {
+  return `<article class="print-calendar-card ${item.kind}">
+    <span>${escapeHtml(item.label)}</span>
+    <strong>${escapeHtml(item.date)}</strong>
+    <p>${escapeHtml(item.title)}</p>
+  </article>`;
+}
+
 function renderSourceLink(item: PosterStory, label: string, className: string): string {
   if (!item.url) {
     return `<p class="${className}">${escapeHtml(label)}</p>`;
@@ -1425,6 +1551,10 @@ function formatChineseDate(date: string): string {
 function formatStorySourceLine(item: PosterStory): string {
   const source = item.source || "source pending";
   return item.publishedDateNy ? `${source} · 美東 ${item.publishedDateNy}` : source;
+}
+
+function printPageCss(): string {
+  return `:root{--paper:#ffffff;--ink:#171410;--muted:#6f675c;--rule:#d8d1c5;--hair:#ebe4d8;--red:#a82022;--blue:#184f86;--up:#148a4a;--down:#c43b3b;--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Noto Sans Mono TC",monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;--serif:"Times New Roman","Noto Serif TC",serif}*{box-sizing:border-box}html,body{margin:0;background:#f3efe7;color:var(--ink);font-family:var(--sans)}.print-sheet{max-width:980px;margin:0 auto;padding:28px 24px 40px;background:var(--paper)}.print-header{padding-bottom:16px;border-bottom:2px solid var(--rule)}.eyebrow{margin:0 0 8px;color:var(--red);font-family:var(--mono);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.print-header h1{margin:0;font-family:var(--serif);font-size:48px;line-height:.95;letter-spacing:-.08em}.print-date{margin:10px 0 0;color:var(--muted);font-family:var(--mono);font-size:13px}.print-one-line{margin:14px 0 0;max-width:760px;padding-left:12px;border-left:4px solid var(--red);font-size:18px;line-height:1.5;font-weight:700}.print-section{margin-top:22px}.print-section h2{margin:0 0 10px;font-size:22px;letter-spacing:-.04em}.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.print-metric,.print-mega,.print-stock-card,.print-lead-card,.print-calendar-card,.print-empty{border:1px solid var(--rule);background:#fff;padding:12px}.print-metric span,.print-mega span,.print-card-kicker,.print-calendar-card span{display:block;color:var(--muted);font-family:var(--mono);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.print-metric strong,.print-mega strong{display:block;margin-top:6px;font-family:var(--mono);font-size:24px;line-height:1}.print-metric em,.print-mega em{display:block;margin-top:6px;font-style:normal;font-family:var(--mono);font-size:13px;font-weight:900}.print-metric.up em,.print-mega.up em{color:var(--up)}.print-metric.down em,.print-mega.down em{color:var(--down)}.mega-grid-print{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.print-mega small{display:block;margin-top:4px;color:var(--muted);font-family:var(--mono);font-size:11px}.print-stock-grid,.print-calendar-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.print-stock-card h3,.print-lead-card h3{margin:8px 0 8px;font-size:24px;line-height:1.14;letter-spacing:-.05em}.print-stock-card p:not(.print-card-kicker),.print-lead-card p:not(.print-card-kicker),.print-calendar-card p{margin:0;color:#413c35;font-size:14px;line-height:1.55}.print-stock-card em,.print-lead-card em{display:block;margin-top:10px;padding-top:8px;border-top:1px solid var(--hair);color:var(--blue);font-style:normal;font-family:var(--mono);font-size:11px;font-weight:800}.print-story-list{display:grid;gap:12px}.print-lead-card h3{font-size:28px}.print-calendar-card strong{display:block;margin:8px 0 6px;font-family:var(--mono);font-size:16px}.print-calendar-card.earnings span{color:#7b5214}.print-footer{display:flex;gap:8px 18px;flex-wrap:wrap;margin-top:22px;padding-top:12px;border-top:1px solid var(--rule);color:var(--muted);font-family:var(--mono);font-size:10px;line-height:1.45}a{color:inherit;text-decoration:none}@media print{@page{size:A4 portrait;margin:12mm}html,body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-sheet{max-width:none;margin:0;padding:0}.print-section,.print-stock-card,.print-lead-card,.print-calendar-card,.print-metric,.print-mega{break-inside:avoid-page;page-break-inside:avoid}}`;
 }
 
 function posterCss(): string {
@@ -3183,7 +3313,8 @@ function resolvePosterReportDate(requestUrl: URL): string | null {
   return parsed.toISOString().slice(0, 10) === date ? date : null;
 }
 
-function resolvePosterFormat(requestUrl: URL): "json" | "html" | "calendar" | "svg" | "md" | "txt" {
+function resolvePosterFormat(requestUrl: URL): "json" | "html" | "print" | "calendar" | "svg" | "md" | "txt" {
+  if (requestUrl.pathname === "/daily/print" || requestUrl.pathname === "/daily/print.html" || requestUrl.pathname === "/daily/us-print" || requestUrl.pathname === "/daily/us-print.html") return "print";
   if (requestUrl.pathname === "/daily/calendar" || requestUrl.pathname === "/daily/us-calendar" || requestUrl.pathname === "/daily/us-calendar.html") return "calendar";
   if (requestUrl.pathname === "/daily" || requestUrl.pathname.endsWith(".html")) return "html";
   if (requestUrl.pathname.endsWith(".html")) return "html";

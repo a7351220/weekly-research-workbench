@@ -31,6 +31,10 @@ const DAILY_ENDPOINTS = [
   "/daily/us-poster.svg",
   "/daily/us-poster.md",
   "/daily/us-poster.txt",
+  "/daily/print",
+  "/daily/print.html",
+  "/daily/us-print",
+  "/daily/us-print.html",
   "/daily/calendar",
   "/daily/us-calendar",
   "/daily/us-calendar.html",
@@ -91,6 +95,10 @@ export async function handleAppRequest(request: Request, env: Env): Promise<Resp
     case "/daily/us-poster.svg":
     case "/daily/us-poster.md":
     case "/daily/us-poster.txt":
+    case "/daily/print":
+    case "/daily/print.html":
+    case "/daily/us-print":
+    case "/daily/us-print.html":
     case "/daily/calendar":
     case "/daily/us-calendar":
     case "/daily/us-calendar.html":
