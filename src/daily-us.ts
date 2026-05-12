@@ -311,7 +311,7 @@ function resolvePublicOrigin(requestUrl: URL, request?: Request): string {
 function resolveReportDate(requestUrl: URL): string | null {
   const date = requestUrl.searchParams.get("date");
   if (!date) {
-    return getRecommendedCompletedUsSessionDate(getNewYorkClockParts());
+    return getDefaultPublishedUsSessionDate();
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return null;
@@ -1774,6 +1774,20 @@ function getRecommendedCompletedUsSessionDate(newYork: { date: string; minutesSi
     ? newYork.date
     : addUtcDays(newYork.date, -1);
   return previousWeekday(targetDate);
+}
+
+function getDefaultPublishedUsSessionDate(): string {
+  const newYork = getNewYorkClockParts();
+  const taipei = getTimeZoneClockParts("Asia/Taipei");
+  const completed = getRecommendedCompletedUsSessionDate(newYork);
+  const publishDateTaipei = addUtcDays(completed, 1);
+  if (
+    taipei.date > publishDateTaipei
+    || (taipei.date === publishDateTaipei && taipei.minutesSinceMidnight >= 8 * 60)
+  ) {
+    return completed;
+  }
+  return previousWeekday(completed);
 }
 
 function previousWeekday(date: string): string {

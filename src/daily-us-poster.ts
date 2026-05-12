@@ -1026,7 +1026,6 @@ function renderPosterHtml(payload: PosterPayload): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="900">
   <title>${escapeHtml(p.title)} · ${escapeHtml(p.date)}</title>
   <style>${posterCssV3()}</style>
 </head>
@@ -1049,7 +1048,6 @@ function renderCalendarHtml(payload: PosterPayload): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="900">
   <title>重要行事曆 · ${escapeHtml(p.date)}</title>
   <style>${calendarCss()}</style>
 </head>
@@ -2934,10 +2932,19 @@ function resolvePosterFormat(requestUrl: URL): "json" | "html" | "calendar" | "s
 
 function getDefaultPosterDate(): string {
   const newYork = getZonedDateParts(new Date(), "America/New_York");
-  const candidate = newYork.minutesSinceMidnight >= 17 * 60 + 30
-    ? newYork.date
-    : addUtcDays(newYork.date, -1);
-  return previousWeekday(candidate);
+  const taipei = getZonedDateParts(new Date(), "Asia/Taipei");
+  const completed = previousWeekday(
+    newYork.minutesSinceMidnight >= 17 * 60 + 30
+      ? newYork.date
+      : addUtcDays(newYork.date, -1),
+  );
+  const publishDateTaipei = addUtcDays(completed, 1);
+  return (
+    taipei.date > publishDateTaipei
+    || (taipei.date === publishDateTaipei && taipei.minutesSinceMidnight >= 8 * 60)
+  )
+    ? completed
+    : previousWeekday(completed);
 }
 
 function getZonedDateParts(date: Date, timeZone: string): { date: string; minutesSinceMidnight: number } {

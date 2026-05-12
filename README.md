@@ -4,6 +4,8 @@ Minimal service for the US daily market report plus an isolated Taiwan stock res
 
 The US poster workflow remains separate from Taiwan sources. Taiwan data is exposed through its own endpoints and does not affect `/daily/us` or `/daily`.
 
+Default US daily and poster endpoints switch to the new session at roughly `08:00 Asia/Taipei`. Before that release gate, the no-`date` routes continue serving the previous published US session even if the market has already closed in New York.
+
 ## Production URLs
 
 - Daily HTML: `https://weekly-rss-daily.zeabur.app/daily/us`
