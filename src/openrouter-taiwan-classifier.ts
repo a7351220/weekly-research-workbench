@@ -18,7 +18,7 @@ interface TaiwanClassificationResult {
   };
 }
 
-const DEFAULT_MODEL = "qwen/qwen-turbo";
+const DEFAULT_MODEL = "mistralai/mistral-nemo";
 const BATCH_SIZE = 12;
 
 export async function classifyTaiwanItemsWithOpenRouter(
@@ -125,11 +125,12 @@ async function classifyBatch(items: FeedItem[], env: Env, model: string): Promis
       model,
       temperature: 0,
       max_tokens: 1600,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "你是台股新聞分類器。只能根據輸入新聞的標題、摘要、來源、日期做判斷，不可補充外部知識。輸出嚴格 JSON：{\"items\":[{\"id\":\"...\",\"focus\":\"stock|industry|market|macro|official|fund_etf|noise|other\",\"importance\":0-100,\"confidence\":0-1,\"entities\":[\"...\"],\"themes\":[\"...\"],\"isTopStory\":true,\"isStockNews\":false,\"isIndustryNews\":false,\"rationale\":\"不超過20字\"}]}。判斷規則：1) ETF、基金、配息、排行屬於 fund_etf。2) 活動、講座、抽獎、生活、旅遊、房市屬於 noise。3) 明確公司財報、營收、法說、訂單、股價異動屬於 stock。4) 供應鏈、半導體、封裝、PCB、AI 伺服器、記憶體屬於 industry。5) 加權指數、外資、三大法人、成交量屬於 market。6) 匯率、央行、出口、PMI、通膨、利率屬於 macro。7) 證交所、櫃買重大公告且不是ETF時可標 official。8) 盡量讓 isTopStory 只給真正重要的少數項目。",
+            "你是台股新聞分類器。只能根據輸入新聞的標題、摘要、來源、日期做判斷，不可補充外部知識。輸出嚴格 JSON：{\"items\":[{\"id\":\"...\",\"focus\":\"stock|industry|market|macro|official|fund_etf|noise|other\",\"importance\":0-100,\"confidence\":0-1,\"entities\":[\"...\"],\"themes\":[\"...\"],\"isTopStory\":true,\"isStockNews\":false,\"isIndustryNews\":false,\"rationale\":\"8字內\"}]}。rationale 只寫極短標籤，例如：公司營收、ETF配息、外資買超、供應鏈擴產。不要解釋規則，不要寫完整句。判斷規則：1) ETF、基金、配息、排行屬於 fund_etf。2) 活動、講座、抽獎、生活、旅遊、房市屬於 noise。3) 明確公司財報、營收、法說、訂單、股價異動屬於 stock。4) 供應鏈、半導體、封裝、PCB、AI 伺服器、記憶體屬於 industry。5) 加權指數、外資、三大法人、成交量屬於 market。6) 匯率、央行、出口、PMI、通膨、利率屬於 macro。7) 證交所、櫃買重大公告且不是ETF時可標 official。8) 盡量讓 isTopStory 只給真正重要的少數項目。",
         },
         {
           role: "user",
@@ -167,10 +168,18 @@ function parseClassifiedItems(value: string, model: string): ClassifiedItem[] {
     .trim();
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end <= start) return [];
+  const arrayEnd = cleaned.lastIndexOf("]");
+  if (start < 0) return [];
 
   try {
-    const parsed = JSON.parse(cleaned.slice(start, end + 1)) as {
+    const jsonCandidate = end > start
+      ? cleaned.slice(start, end + 1)
+      : arrayEnd > start
+        ? `${cleaned.slice(start, arrayEnd + 1)}}`
+        : "";
+    if (!jsonCandidate) return [];
+
+    const parsed = JSON.parse(jsonCandidate) as {
       items?: Array<{
         id?: string;
         focus?: string;
