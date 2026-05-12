@@ -275,18 +275,18 @@ async function buildPosterStockNews(
   const sourceItems = payload.stockNews?.length
     ? payload.stockNews
     : filterItemsForPosterSession([...payload.topStories, ...payload.topAiRadar, ...payload.earningsRadar], payload.reportDate);
-  const candidates = buildItemStoryCandidates(
+  const rankedCandidates = buildItemStoryCandidates(
     sourceItems,
     payload.reportDate,
-  )
-    .filter(isStrongStockNewsCandidate)
-    .sort((a, b) => b.score - a.score);
+  ).sort((a, b) => b.score - a.score);
+  const strongCandidates = rankedCandidates.filter(isStrongStockNewsCandidate);
+  const backupCandidates = rankedCandidates.filter((candidate) => !isLowValueStockNewsCandidate(candidate));
   const stories: PosterStory[] = [];
   const usedTitles = new Set<string>();
   const excludedUrls = new Set(excludedStories.map((story) => normalizeUrl(story.url || "")).filter(Boolean));
   const excludedTitles = new Set(excludedStories.map((story) => normalizeText(story.originalTitle || story.title)).filter(Boolean));
 
-  for (const candidate of candidates) {
+  for (const candidate of [...strongCandidates, ...backupCandidates]) {
     const normalizedTitle = normalizeText(candidate.title);
     const normalizedUrl = normalizeUrl(candidate.url || "");
     if (normalizedUrl && excludedUrls.has(normalizedUrl)) continue;
@@ -671,6 +671,15 @@ function isStrongStockNewsCandidate(candidate: StoryCandidate): boolean {
   const isAdviceFormat = /\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|reasons to buy|prediction:|outperform the s&p 500|flagship tech etf|next nvidia|challenger|loading up|you'd invested|start buying|maternity leave|best companies to work|workplace|dating app|movie|streaming guide)\b/i.test(text);
   if (isAdviceFormat) return false;
   return hasCompany && hasCatalyst && newsSpecificityFromText(text) >= 18;
+}
+
+function isLowValueStockNewsCandidate(candidate: StoryCandidate): boolean {
+  const text = `${candidate.title} ${candidate.summary}`.toLowerCase();
+  if (!candidate.url) return true;
+  if (isBroadMarketRecap(text)) return true;
+  if (/\b(most active|earnings call transcript|earnings call presentation|week in review|weekly review|roundup|earnings scoreboard)\b/i.test(text)) return true;
+  if (/\b(should you buy|better buy|best buy|worth buying|top stock to buy|buy now|sell now|prediction:|streaming guide)\b/i.test(text)) return true;
+  return newsSpecificityFromText(text) < 10;
 }
 
 function isWeakPosterSource(candidate: StoryCandidate): boolean {
@@ -2728,6 +2737,18 @@ body{
     break-inside:avoid-page;
     page-break-inside:avoid;
   }
+  .stock-card h3,
+  .stock-card p:not(.stock-card-top),
+  .stock-card em,
+  .lead-story h2,
+  .story-text,
+  .fact-pill{
+    display:block;
+    overflow:visible!important;
+    white-space:normal!important;
+    text-overflow:clip!important;
+    -webkit-line-clamp:unset!important;
+  }
   .stock-card:nth-child(4n){border-right:1px solid var(--hair)}
   .stock-card:nth-last-child(-n + 4){border-bottom:1px solid var(--hair)}
   .lead-grid{
@@ -2743,6 +2764,11 @@ body{
     border:1px solid var(--rule);
     break-inside:avoid-page;
     page-break-inside:avoid;
+  }
+  .fact-pill{
+    position:static;
+    margin-top:12px;
+    padding:8px 10px;
   }
   .next-watch .calendar-list{
     grid-template-columns:repeat(2,minmax(0,1fr));
