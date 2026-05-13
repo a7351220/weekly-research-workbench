@@ -208,7 +208,7 @@ export async function handleDailyUs(request: Request, env: Env): Promise<Respons
 
 export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate: string, request?: Request): Promise<DailyUsJsonPayload> {
   const includePrivateNews = shouldFetchPrivateNews(requestUrl, env);
-  const cacheKey = `daily-us:v13:${reportDate}:private-${includePrivateNews ? "1" : "0"}`;
+  const cacheKey = `daily-us:v14:${reportDate}:private-${includePrivateNews ? "1" : "0"}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
   if (isDailyUsPayload(cached)) {
     return {
@@ -1574,24 +1574,37 @@ function buildNextSessionWatchlist(
   megaCaps: QuoteSnapshot[],
 ): Array<{ label: string; rationale: string; sourceUrl?: string | null }> {
   const watchlist: Array<{ label: string; rationale: string; sourceUrl?: string | null }> = [];
+  const seenLabels = new Set<string>();
+
+  const pushWatchlistItem = (label: string, rationale: string, sourceUrl?: string | null) => {
+    const key = normalizeText(label);
+    if (!key || seenLabels.has(key) || watchlist.length >= 5) return;
+    seenLabels.add(key);
+    watchlist.push({ label, rationale, sourceUrl });
+  };
+
+  const rankedMacroEvents = [...macroCalendar]
+    .sort((a, b) => scoreMacroWatchlistEvent(b.title) - scoreMacroWatchlistEvent(a.title))
+    .slice(0, 4);
+
+  for (const event of rankedMacroEvents) {
+    if (watchlist.length >= 5) break;
+    pushWatchlistItem(
+      `${event.dateLabel} ${event.timeLabel}`.trim().replace(/\s+/g, " ") + ` · ${event.title}`,
+      buildMacroWatchlistRationale(event.title),
+      event.sourceUrl,
+    );
+  }
 
   for (const item of [...topStories, ...aiRadar, ...earningsRadar]) {
     if (watchlist.length >= 5) break;
     if (/(earnings|guidance|forecast|cpi|ppi|jobs|payrolls|fomc|fed|treasury|tariff|rate cut|inflation)/i.test(`${item.title} ${item.description}`)) {
-      watchlist.push({
-        label: item.title,
-        rationale: item.description || "Story is likely to shape the next US session.",
-        sourceUrl: item.url,
-      });
+      pushWatchlistItem(
+        item.title,
+        item.description || "這則事件可能延續影響下一個美股交易日。",
+        item.url,
+      );
     }
-  }
-  for (const event of macroCalendar) {
-    if (watchlist.length >= 5) break;
-    watchlist.push({
-      label: `${event.dateLabel} ${event.timeLabel} · ${event.title}`,
-      rationale: `Official BEA release on the schedule. This is a hard macro checkpoint for the next US session.`,
-      sourceUrl: event.sourceUrl,
-    });
   }
 
   const spx = quoteByKey(indices, "spx");
@@ -1603,36 +1616,50 @@ function buildNextSessionWatchlist(
 
   const spxChange = spx?.changePct;
   if (watchlist.length < 5 && spxChange !== null && spxChange !== undefined) {
-    watchlist.push({
-      label: "Index follow-through",
-      rationale: `S&P 500 closed ${formatSigned(spxChange, 2)}%; the next session should test whether that move broadens or fades.`,
-    });
+    pushWatchlistItem("指數延續性", `S&P 500 收盤 ${formatSigned(spxChange, 2)}%；下一個交易日要觀察漲勢是否擴散或轉弱。`);
   }
   const vixPrice = vix?.price;
   if (watchlist.length < 5 && vixPrice !== null && vixPrice !== undefined) {
-    watchlist.push({
-      label: "Volatility check",
-      rationale: `VIX at ${formatNumber(vixPrice, 2)} is a quick gauge for whether risk appetite is stabilizing or re-tightening.`,
-    });
+    pushWatchlistItem("波動率觀察", `VIX 在 ${formatNumber(vixPrice, 2)}，可快速判斷市場風險偏好是延續還是重新收縮。`);
   }
   const us10yPrice = us10y?.price;
   if (watchlist.length < 5 && us10yPrice !== null && us10yPrice !== undefined) {
-    watchlist.push({
-      label: "Rates check",
-      rationale: `US 10Y ended near ${formatNumber(us10yPrice, 2)}%; another sharp move would likely pressure duration-sensitive tech again.`,
-    });
+    pushWatchlistItem("利率觀察", `美國 10 年期公債殖利率在 ${formatNumber(us10yPrice, 2)}% 附近；若再明顯上行，科技股壓力可能再加大。`);
   }
   for (const quote of movers) {
     if (watchlist.length >= 5) break;
     if (quote.changePct === null || quote.changePct === undefined) continue;
-    watchlist.push({
-      label: `${quote.label} follow-through`,
-      rationale: `${quote.label} moved ${formatSigned(quote.changePct, 2)}%; if the move extends, it can drag the broader AI/megacap complex with it.`,
-      sourceUrl: quote.sourceUrl,
-    });
+    pushWatchlistItem(
+      `${quote.label} 延續性`,
+      `${quote.label} 單日變動 ${formatSigned(quote.changePct, 2)}%；若走勢延續，可能進一步帶動大型科技與 AI 族群。`,
+      quote.sourceUrl,
+    );
   }
 
   return watchlist.slice(0, 5);
+}
+
+function scoreMacroWatchlistEvent(title: string): number {
+  const text = title.toLowerCase();
+  if (/消費者物價|核心cpi|consumer price|cpi/.test(text)) return 100;
+  if (/生產者物價|ppi/.test(text)) return 96;
+  if (/非農|失業率|平均每小時工資|payroll|unemployment/.test(text)) return 94;
+  if (/零售額|retail/.test(text)) return 92;
+  if (/個人所得|個人支出|pce/.test(text)) return 90;
+  if (/ism|採購經理人/.test(text)) return 86;
+  if (/gdp|國內生產毛額/.test(text)) return 82;
+  return 60;
+}
+
+function buildMacroWatchlistRationale(title: string): string {
+  const text = title.toLowerCase();
+  if (/消費者物價|核心cpi|consumer price|cpi/.test(text)) return "CPI 會直接影響市場對通膨與降息路徑的預期，通常是當週最核心的總經事件之一。";
+  if (/生產者物價|ppi/.test(text)) return "PPI 可用來觀察上游通膨壓力，市場會拿來交叉驗證 CPI 後續方向。";
+  if (/非農|失業率|平均每小時工資|payroll|unemployment/.test(text)) return "就業數據會直接影響景氣與利率預期，通常會快速反映在美債殖利率與大型股估值。";
+  if (/零售額|retail/.test(text)) return "零售數據能反映美國消費力道，對景氣與企業營收預期都很重要。";
+  if (/個人所得|個人支出|pce/.test(text)) return "個人所得、支出與 PCE 反映需求與通膨，是判斷經濟韌性的重要資料。";
+  if (/ism|採購經理人/.test(text)) return "ISM 可快速反映景氣冷熱，是市場判斷企業活動與景氣方向的重要先行指標。";
+  return "這項總經數據可能影響下一個美股交易日的利率預期與風險偏好。";
 }
 
 function renderDailyUsHtml(payload: DailyUsJsonPayload): string {
