@@ -791,46 +791,52 @@ async function translateWithOpenRouter(value: string, env: Env): Promise<string>
     return value;
   }
 
-  const model = env.OPENROUTER_TRANSLATION_MODEL || "mistralai/mistral-nemo";
-  const cacheKey = `translation:openrouter:v7:${model}:${hashString(text)}`;
-  const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "text");
-  if (cached) return cached;
+  const models = resolveTranslationModels(env);
+  for (const model of models) {
+    const cacheKey = `translation:openrouter:v8:${model}:${hashString(text)}`;
+    const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "text");
+    if (cached) return cached;
+  }
   const protectedText = protectTranslationTerms(text);
 
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://weekly-rss-daily.zeabur.app",
-        "X-Title": "us-daily-market-report",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        max_tokens: Math.min(500, Math.max(80, Math.ceil(text.length * 1.8))),
-        messages: [
-          {
-            role: "system",
-            content:
-              "你是台灣財經新聞翻譯器。請把英文財經新聞翻成自然繁體中文。所有 __KEEP_數字__ 佔位符必須原樣保留，不得刪除、改寫或重新排序。不要新增資訊、不要摘要、不要解釋。只輸出譯文。",
-          },
-          { role: "user", content: protectedText.text },
-        ],
-      }),
-    });
-    if (!response.ok) return value;
-    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const translated = normalizeTranslatedFinancialText(
-      restoreTranslationTerms(data.choices?.[0]?.message?.content?.trim() ?? "", protectedText.terms),
-    );
-    if (!translated) return value;
-    await env.EDITORIAL_CACHE?.put(cacheKey, translated, { expirationTtl: 60 * 60 * 24 * 14 });
-    return translated;
-  } catch {
-    return value;
+  for (const model of models) {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://weekly-rss-daily.zeabur.app",
+          "X-Title": "us-daily-market-report",
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          max_tokens: Math.min(500, Math.max(80, Math.ceil(text.length * 1.8))),
+          messages: [
+            {
+              role: "system",
+              content:
+                "你是台灣財經新聞翻譯器。請把英文財經新聞翻成自然繁體中文。所有 __KEEP_數字__ 佔位符必須原樣保留，不得刪除、改寫或重新排序。不要新增資訊、不要摘要、不要解釋。只輸出譯文。",
+            },
+            { role: "user", content: protectedText.text },
+          ],
+        }),
+      });
+      if (!response.ok) continue;
+      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const translated = normalizeTranslatedFinancialText(
+        restoreTranslationTerms(data.choices?.[0]?.message?.content?.trim() ?? "", protectedText.terms),
+      );
+      if (!translated || isFailedTranslation(text, translated)) continue;
+      const cacheKey = `translation:openrouter:v8:${model}:${hashString(text)}`;
+      await env.EDITORIAL_CACHE?.put(cacheKey, translated, { expirationTtl: 60 * 60 * 24 * 14 });
+      return translated;
+    } catch {
+      continue;
+    }
   }
+  return value;
 }
 
 async function rewriteStoryWithOpenRouter(title: string, summary: string, fact: string, env: Env): Promise<StoryRewrite> {
@@ -842,60 +848,91 @@ async function rewriteStoryWithOpenRouter(title: string, summary: string, fact: 
     return fallback();
   }
 
-  const model = env.OPENROUTER_TRANSLATION_MODEL || "mistralai/mistral-nemo";
   const rawInput = [
     `title: ${title}`,
     summary ? `summary: ${summary}` : "summary: N/A",
     `fact: ${fact}`,
   ].join("\n");
-  const cacheKey = `story-rewrite:openrouter:v2:${model}:${hashString(rawInput)}`;
-  const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
-  if (isStoryRewrite(cached)) return cached;
+  const models = resolveTranslationModels(env);
+  for (const model of models) {
+    const cacheKey = `story-rewrite:openrouter:v3:${model}:${hashString(rawInput)}`;
+    const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "json");
+    if (isStoryRewrite(cached)) return cached;
+  }
 
   const protectedInput = protectTranslationTerms(rawInput);
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://weekly-rss-daily.zeabur.app",
-        "X-Title": "us-daily-market-report",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.1,
-        max_tokens: 320,
-        messages: [
-          {
-            role: "system",
-            content:
-              "你是台灣財經日報編輯。根據英文來源改寫成自然繁體中文，不是逐句翻譯。只能使用輸入中的事實，不得新增因果、數字或投資建議。所有 __KEEP_數字__ 佔位符必須原樣保留。輸出嚴格 JSON：{\"title\":\"短標題\",\"summary\":\"一到兩句摘要\"}。",
-          },
-          {
-            role: "user",
-            content:
-              `${protectedInput.text}\n\n要求：title 不要像投顧喊單，不要用「是否買進」語氣；summary 要完整句，不要省略號；保留股票代號、公司名、百分比、金額。fact 只供核對，除非是關鍵數字，否則不要把「來源：...」或資料來源文字寫進摘要。`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback();
-    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const content = data.choices?.[0]?.message?.content?.trim() ?? "";
-    const parsed = parseStoryRewrite(content);
-    if (!parsed) return fallback();
+  for (const model of models) {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://weekly-rss-daily.zeabur.app",
+          "X-Title": "us-daily-market-report",
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.1,
+          max_tokens: 320,
+          messages: [
+            {
+              role: "system",
+              content:
+                "你是台灣財經日報編輯。根據英文來源改寫成自然繁體中文，不是逐句翻譯。只能使用輸入中的事實，不得新增因果、數字或投資建議。所有 __KEEP_數字__ 佔位符必須原樣保留。輸出嚴格 JSON：{\"title\":\"短標題\",\"summary\":\"一到兩句摘要\"}。",
+            },
+            {
+              role: "user",
+              content:
+                `${protectedInput.text}\n\n要求：title 不要像投顧喊單，不要用「是否買進」語氣；summary 要完整句，不要省略號；保留股票代號、公司名、百分比、金額。fact 只供核對，除非是關鍵數字，否則不要把「來源：...」或資料來源文字寫進摘要。`,
+            },
+          ],
+        }),
+      });
+      if (!response.ok) continue;
+      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const content = data.choices?.[0]?.message?.content?.trim() ?? "";
+      const parsed = parseStoryRewrite(content);
+      if (!parsed) continue;
 
-    const rewritten = {
-      title: normalizeTranslatedFinancialText(restoreTranslationTerms(parsed.title, protectedInput.terms)),
-      summary: normalizeTranslatedFinancialText(restoreTranslationTerms(parsed.summary, protectedInput.terms)),
-    };
-    if (!rewritten.title) return fallback();
-    await env.EDITORIAL_CACHE?.put(cacheKey, JSON.stringify(rewritten), { expirationTtl: 60 * 60 * 24 * 14 });
-    return rewritten;
-  } catch {
-    return fallback();
+      const rewritten = {
+        title: normalizeTranslatedFinancialText(restoreTranslationTerms(parsed.title, protectedInput.terms)),
+        summary: normalizeTranslatedFinancialText(restoreTranslationTerms(parsed.summary, protectedInput.terms)),
+      };
+      if (!rewritten.title || isFailedTranslation(title, rewritten.title)) continue;
+      const cacheKey = `story-rewrite:openrouter:v3:${model}:${hashString(rawInput)}`;
+      await env.EDITORIAL_CACHE?.put(cacheKey, JSON.stringify(rewritten), { expirationTtl: 60 * 60 * 24 * 14 });
+      return rewritten;
+    } catch {
+      continue;
+    }
   }
+  return fallback();
+}
+
+function resolveTranslationModels(env: Env): string[] {
+  const preferred = (env.OPENROUTER_TRANSLATION_MODEL || "").trim();
+  const blocked = new Set(["qwen/qwen-turbo"]);
+  const defaults = [
+    "mistralai/mistral-nemo",
+    "mistralai/mistral-small-24b-instruct-2501",
+    "openai/gpt-oss-20b",
+  ];
+  const models = [preferred, ...defaults].filter(Boolean).filter((model, index, list) => !blocked.has(model) && list.indexOf(model) === index);
+  return models.length ? models : ["mistralai/mistral-nemo"];
+}
+
+function isFailedTranslation(source: string, translated: string): boolean {
+  const src = source.trim();
+  const out = translated.trim();
+  if (!out) return true;
+  if (normalizeTextLoose(src) === normalizeTextLoose(out)) return true;
+  if (!containsCjk(out) && /[A-Za-z]{4,}/.test(src)) return true;
+  return false;
+}
+
+function normalizeTextLoose(value: string): string {
+  return value.toLowerCase().replace(/[“”"'`]/g, "").replace(/\s+/g, " ").trim();
 }
 
 function parseStoryRewrite(value: string): StoryRewrite | null {
