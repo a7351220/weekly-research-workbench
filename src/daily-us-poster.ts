@@ -148,7 +148,7 @@ async function buildPosterPayload(sourcePayload: DailyUsPayload, requestUrl: URL
   const stockNews = await buildPosterStockNews(sourcePayload, translator, stories);
   const watchlist = await Promise.all(sourcePayload.nextSessionWatchlist.slice(0, 3).map((item) => translator.headline(item.label || "N/A")));
   const calendarFull = await buildPosterCalendar(sourcePayload, translator, 12);
-  const calendar = calendarFull.slice(0, 6);
+  const calendar = calendarFull.slice(0, 8);
   while (watchlist.length < 3) watchlist.push("N/A");
 
   const hasNa = [...indices, ...assets].some((item) => item.trend === "na") || megaCaps.some((item) => item.trend === "na");
