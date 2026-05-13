@@ -1337,6 +1337,11 @@ async function fetchHistoricalQuoteSnapshot(config: QuoteConfig, reportDate: str
     }
   }
 
+  const cnbcQuote = await fetchCnbcQuoteSnapshot(config);
+  if (cnbcQuote.price !== null) {
+    return cnbcQuote;
+  }
+
   return emptyQuote(config);
 }
 
@@ -1404,13 +1409,24 @@ async function fetchFmpQuoteSnapshot(config: QuoteConfig, reportDate: string, ap
     }
     const current = sortedRows[currentIndex];
     const previous = sortedRows[currentIndex - 1];
-    return finalizeQuote(config, previous.close, current.close, null, null, null, current.date, "Financial Modeling Prep EOD", sortedRows.map((row) => ({ date: row.date, close: row.close })).slice(-10));
+    return finalizeQuote(
+      config,
+      previous.close,
+      current.close,
+      null,
+      null,
+      null,
+      current.date,
+      "Financial Modeling Prep EOD",
+      sortedRows.map((row) => ({ date: row.date, close: row.close })).slice(-10),
+      config.sourceUrl,
+    );
   } catch {
     return emptyQuote(config);
   }
 }
 
-async function fetchQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
+async function fetchCnbcQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
   const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${encodeURIComponent(config.symbol)}&requestMethod=quick`;
   try {
     const response = await fetch(url, {
@@ -1433,9 +1449,31 @@ async function fetchQuoteSnapshot(config: QuoteConfig): Promise<QuoteSnapshot> {
     const previousClose = price !== null && change !== null ? price - change : null;
     const asOf = normalizeCnbcTime(quote.last_time);
     if (config.symbol === ".TNX") {
-      return finalizeQuote(config, previousClose !== null ? previousClose / 10 : null, price !== null ? price / 10 : null, null, change !== null ? change / 10 : null, changePct, asOf, "CNBC realtime quote");
+      return finalizeQuote(
+        config,
+        previousClose !== null ? previousClose / 10 : null,
+        price !== null ? price / 10 : null,
+        null,
+        change !== null ? change / 10 : null,
+        changePct,
+        asOf,
+        "CNBC realtime quote",
+        [],
+        "https://quote.cnbc.com/",
+      );
     }
-    return finalizeQuote(config, previousClose, price, null, change, changePct, asOf, "CNBC realtime quote");
+    return finalizeQuote(
+      config,
+      previousClose,
+      price,
+      null,
+      change,
+      changePct,
+      asOf,
+      "CNBC realtime quote",
+      [],
+      "https://quote.cnbc.com/",
+    );
   } catch {
     return emptyQuote(config);
   }
@@ -1468,6 +1506,7 @@ function finalizeQuote(
   explicitAsOf?: string | null,
   dataProvider?: string | null,
   history: PricePoint[] = [],
+  explicitSourceUrl?: string | null,
 ): QuoteSnapshot {
   const change = explicitChange ?? (price !== null && previousClose !== null ? price - previousClose : null);
   const changePct = explicitChangePct ?? (change !== null && previousClose ? (change / previousClose) * 100 : null);
@@ -1481,7 +1520,7 @@ function finalizeQuote(
     change,
     changePct,
     asOf: explicitAsOf ?? (regularMarketTime ? new Date(regularMarketTime * 1000).toISOString() : null),
-    sourceUrl: config.sourceUrl,
+    sourceUrl: explicitSourceUrl ?? config.sourceUrl,
     dataProvider: dataProvider ?? null,
     history,
   };
