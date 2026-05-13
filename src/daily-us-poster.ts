@@ -195,8 +195,9 @@ async function buildPosterPayload(sourcePayload: DailyUsPayload, requestUrl: URL
 
 async function buildPosterCalendar(payload: DailyUsPayload, translator: PosterTranslator, limit: number): Promise<PosterCalendarEvent[]> {
   const rankedMacroCalendar = [...payload.macroCalendar]
+    .filter((item) => isFutureCalendarEntry(item.dateLabel, payload.reportDate))
     .sort((a, b) => scorePosterCalendarItem(b, payload.reportDate) - scorePosterCalendarItem(a, payload.reportDate))
-    .slice(0, 6);
+    .slice(0, 8);
   const macroEvents: PosterCalendarEvent[] = await Promise.all(rankedMacroCalendar.map(async (item) => ({
     date: `${item.dateLabel} ${item.timeLabel}`.trim(),
     label: "宏觀數據",
@@ -205,6 +206,10 @@ async function buildPosterCalendar(payload: DailyUsPayload, translator: PosterTr
   })));
   const earningsEvents: PosterCalendarEvent[] = await Promise.all(payload.earningsRadar
     .filter((item) => /\b(pre-market earnings|after-hours earnings|earnings report for)\b/i.test(item.title))
+    .filter((item) => {
+      const date = extractCalendarDateSync(item.title);
+      return isFutureCalendarEntry(date, payload.reportDate);
+    })
     .slice(0, 3)
     .map(async (item) => ({
       date: await translator.calendarDate(item.title),
@@ -223,6 +228,14 @@ function scorePosterCalendarItem(
   const titleScore = scorePosterCalendarTitle(item.title);
   const distancePenalty = calendarDistancePenalty(item.dateLabel, reportDate);
   return titleScore - distancePenalty;
+}
+
+function isFutureCalendarEntry(dateLabel: string, reportDate: string): boolean {
+  const target = parsePosterCalendarDate(dateLabel, reportDate);
+  if (!target) return true;
+  const base = Date.parse(`${addUtcDays(reportDate, 1)}T00:00:00Z`);
+  if (!Number.isFinite(base)) return true;
+  return target >= base;
 }
 
 function scorePosterCalendarTitle(title: string): number {
@@ -247,6 +260,11 @@ function calendarDistancePenalty(dateLabel: string, reportDate: string): number 
 }
 
 function parsePosterCalendarDate(dateLabel: string, reportDate: string): number | null {
+  const chinese = /(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/.exec(dateLabel.trim());
+  if (chinese) {
+    const year = Number(chinese[1] || reportDate.slice(0, 4));
+    return Date.UTC(year, Number(chinese[2]) - 1, Number(chinese[3]), 12);
+  }
   const monthDay = /^(\d{1,2})\/(\d{1,2})$/.exec(dateLabel.trim());
   if (monthDay) {
     const year = Number(reportDate.slice(0, 4));
@@ -1044,6 +1062,10 @@ function formatQuarterSuffix(title: string): string {
 }
 
 async function extractCalendarDate(title: string): Promise<string> {
+  return extractCalendarDateSync(title);
+}
+
+function extractCalendarDateSync(title: string): string {
   const match = title.match(/\b([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\b/);
   if (!match) return "待公布";
   return `${match[3]}年${monthNumber(match[1])}月${Number(match[2])}日`;
