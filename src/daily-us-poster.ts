@@ -148,7 +148,7 @@ async function buildPosterPayload(sourcePayload: DailyUsPayload, requestUrl: URL
   const stockNews = await buildPosterStockNews(sourcePayload, translator, stories);
   const watchlist = await Promise.all(sourcePayload.nextSessionWatchlist.slice(0, 3).map((item) => translator.headline(item.label || "N/A")));
   const calendarFull = await buildPosterCalendar(sourcePayload, translator, 12);
-  const calendar = calendarFull.slice(0, 4);
+  const calendar = calendarFull.slice(0, 6);
   while (watchlist.length < 3) watchlist.push("N/A");
 
   const hasNa = [...indices, ...assets].some((item) => item.trend === "na") || megaCaps.some((item) => item.trend === "na");
@@ -194,7 +194,10 @@ async function buildPosterPayload(sourcePayload: DailyUsPayload, requestUrl: URL
 }
 
 async function buildPosterCalendar(payload: DailyUsPayload, translator: PosterTranslator, limit: number): Promise<PosterCalendarEvent[]> {
-  const macroEvents: PosterCalendarEvent[] = await Promise.all(payload.macroCalendar.slice(0, 3).map(async (item) => ({
+  const rankedMacroCalendar = [...payload.macroCalendar]
+    .sort((a, b) => scorePosterCalendarItem(b, payload.reportDate) - scorePosterCalendarItem(a, payload.reportDate))
+    .slice(0, 6);
+  const macroEvents: PosterCalendarEvent[] = await Promise.all(rankedMacroCalendar.map(async (item) => ({
     date: `${item.dateLabel} ${item.timeLabel}`.trim(),
     label: "宏觀數據",
     title: formatMacroCalendarTitle(item.title) || await translator.calendarTitle(item.title),
@@ -211,6 +214,47 @@ async function buildPosterCalendar(payload: DailyUsPayload, translator: PosterTr
     })));
 
   return [...macroEvents, ...earningsEvents].slice(0, limit);
+}
+
+function scorePosterCalendarItem(
+  item: { dateLabel: string; timeLabel: string; title: string },
+  reportDate: string,
+): number {
+  const titleScore = scorePosterCalendarTitle(item.title);
+  const distancePenalty = calendarDistancePenalty(item.dateLabel, reportDate);
+  return titleScore - distancePenalty;
+}
+
+function scorePosterCalendarTitle(title: string): number {
+  const text = title.toLowerCase();
+  if (/消費者物價|核心cpi|consumer price|cpi/.test(text)) return 100;
+  if (/生產者物價|ppi/.test(text)) return 96;
+  if (/非農|失業率|平均每小時工資|payroll|unemployment/.test(text)) return 94;
+  if (/零售額|retail/.test(text)) return 90;
+  if (/個人所得|個人支出|pce/.test(text)) return 88;
+  if (/ism|採購經理人/.test(text)) return 84;
+  if (/gdp|國內生產毛額|corporate profits/.test(text)) return 82;
+  if (/房屋開工|建築許可|工業生產|產能利用率|耐久財|工廠訂單/.test(text)) return 76;
+  return 60;
+}
+
+function calendarDistancePenalty(dateLabel: string, reportDate: string): number {
+  const target = parsePosterCalendarDate(dateLabel, reportDate);
+  if (!target) return 999;
+  const base = Date.parse(`${reportDate}T12:00:00Z`);
+  if (!Number.isFinite(base)) return 999;
+  return Math.abs(target - base) / (24 * 60 * 60 * 1000) * 4;
+}
+
+function parsePosterCalendarDate(dateLabel: string, reportDate: string): number | null {
+  const monthDay = /^(\d{1,2})\/(\d{1,2})$/.exec(dateLabel.trim());
+  if (monthDay) {
+    const year = Number(reportDate.slice(0, 4));
+    return Date.UTC(year, Number(monthDay[1]) - 1, Number(monthDay[2]), 12);
+  }
+  const withYear = Date.parse(`${dateLabel}, ${reportDate.slice(0, 4)} 12:00:00 GMT`);
+  if (Number.isFinite(withYear)) return withYear;
+  return null;
 }
 
 function buildOneLine(payload: DailyUsPayload): string {
@@ -747,7 +791,7 @@ async function translateWithOpenRouter(value: string, env: Env): Promise<string>
     return value;
   }
 
-  const model = env.OPENROUTER_TRANSLATION_MODEL || "qwen/qwen-turbo";
+  const model = env.OPENROUTER_TRANSLATION_MODEL || "mistralai/mistral-nemo";
   const cacheKey = `translation:openrouter:v7:${model}:${hashString(text)}`;
   const cached = await env.EDITORIAL_CACHE?.get(cacheKey, "text");
   if (cached) return cached;
@@ -798,7 +842,7 @@ async function rewriteStoryWithOpenRouter(title: string, summary: string, fact: 
     return fallback();
   }
 
-  const model = env.OPENROUTER_TRANSLATION_MODEL || "qwen/qwen-turbo";
+  const model = env.OPENROUTER_TRANSLATION_MODEL || "mistralai/mistral-nemo";
   const rawInput = [
     `title: ${title}`,
     summary ? `summary: ${summary}` : "summary: N/A",

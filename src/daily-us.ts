@@ -225,7 +225,7 @@ export async function buildDailyUsPayload(requestUrl: URL, env: Env, reportDate:
     fetchSpecificSources([NASDAQ_EARNINGS_SOURCE, SEEKING_ALPHA_EARNINGS_SOURCE], editorialCache, { days: 5, limitPerSource: 6, maxItems: 10 }),
     fetchSpecificSources(buildSeekingAlphaStockSources(), editorialCache, { days: 5, limitPerSource: 4, maxItems: 36 }),
     fetchTickerTickNews(reportDate, editorialCache),
-    fetchBeaMacroCalendar(),
+    fetchMacroCalendar(reportDate),
     fetchDatedStockNews(reportDate, env, editorialCache),
   ]);
   const [indices, assets, megaCaps] = marketDataStatus.isFinal
@@ -1108,7 +1108,18 @@ function nthWeekdayOfMonthUtc(year: number, monthIndex: number, weekday: number,
   return Date.UTC(year, monthIndex, day, 12);
 }
 
-async function fetchBeaMacroCalendar(): Promise<Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>> {
+async function fetchMacroCalendar(reportDate: string): Promise<Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>> {
+  const [moneyDj, bea] = await Promise.all([
+    fetchMoneyDjMacroCalendar(reportDate),
+    fetchBeaMacroCalendar(reportDate),
+  ]);
+  const merged = dedupeMacroCalendar([...moneyDj, ...bea]);
+  return merged
+    .sort((a, b) => compareMacroCalendarEntries(a, b))
+    .slice(0, 12);
+}
+
+async function fetchBeaMacroCalendar(reportDate: string): Promise<Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>> {
   const url = "https://www.bea.gov/news/schedule";
   try {
     const response = await fetch(url, {
@@ -1123,7 +1134,7 @@ async function fetchBeaMacroCalendar(): Promise<Array<{ dateLabel: string; timeL
     const html = await response.text();
     const entries: Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string; sortKey: number }> = [];
     const rowRegex = /<tr class="scheduled-releases-type-[^"]+">[\s\S]*?<div class="release-date">([^<]+)<\/div>\s*<small class="text-muted">([^<]+)<\/small>[\s\S]*?<td class="release-title[^"]*"[^>]*>([^<]+)<\/td>/g;
-    const currentYear = new Date().getFullYear();
+    const currentYear = Number(reportDate.slice(0, 4));
     for (const match of html.matchAll(rowRegex)) {
       const [, dateLabelRaw, timeLabelRaw, titleRaw] = match;
       const dateLabel = dateLabelRaw.trim();
@@ -1134,15 +1145,136 @@ async function fetchBeaMacroCalendar(): Promise<Array<{ dateLabel: string; timeL
       const sortKey = Number.isFinite(parsed) ? parsed : (Number.isFinite(fallback) ? fallback : Number.MAX_SAFE_INTEGER);
       entries.push({ dateLabel, timeLabel, title, sourceUrl: url, sortKey });
     }
-    const now = Date.now();
+    const rangeStart = Date.parse(`${reportDate}T00:00:00-04:00`);
+    const rangeEnd = Date.parse(`${addUtcDays(reportDate, 21)}T23:59:59-04:00`);
     return entries
-      .filter((entry) => entry.sortKey >= now - 12 * 60 * 60 * 1000)
+      .filter((entry) => entry.sortKey >= rangeStart && entry.sortKey <= rangeEnd)
       .sort((a, b) => a.sortKey - b.sortKey)
-      .slice(0, 5)
+      .slice(0, 8)
       .map(({ dateLabel, timeLabel, title, sourceUrl }) => ({ dateLabel, timeLabel, title, sourceUrl }));
   } catch {
     return [];
   }
+}
+
+async function fetchMoneyDjMacroCalendar(reportDate: string): Promise<Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>> {
+  const sourceUrl = "https://www.moneydj.com/us/tool/tool0011";
+  const from = addUtcDays(reportDate, -1);
+  const to = addUtcDays(reportDate, 21);
+  const url = `https://www.moneydj.com/us/rest/eventlist?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "user-agent": "us-daily-market-report/1.0",
+        accept: "application/json,text/plain,*/*",
+      },
+    });
+    if (!response.ok) return [];
+    const data = await response.json() as Array<{ start_date?: string; text?: string; type?: string; details?: string }>;
+    const entries: Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string; sortKey: number }> = [];
+    for (const item of data) {
+      if (item.type !== "index" || !item.start_date || !item.details) continue;
+      const titles = selectMoneyDjMacroTitles(item.details);
+      if (!titles.length) continue;
+      const [datePart] = item.start_date.split(" ");
+      const normalizedDate = datePart.replace(/\//g, "-");
+      const [year, month, day] = normalizedDate.split("-").map(Number);
+      if (!year || !month || !day) continue;
+      const sortKey = Date.UTC(year, month - 1, day, 12);
+      const dateLabel = `${month}/${day}`;
+      for (const title of titles) {
+        entries.push({
+          dateLabel,
+          timeLabel: "",
+          title,
+          sourceUrl,
+          sortKey,
+        });
+      }
+    }
+    return entries
+      .sort((a, b) => a.sortKey - b.sortKey || a.title.localeCompare(b.title, "zh-Hant"))
+      .slice(0, 24)
+      .map(({ dateLabel, timeLabel, title, sourceUrl }) => ({ dateLabel, timeLabel, title, sourceUrl }));
+  } catch {
+    return [];
+  }
+}
+
+function selectMoneyDjMacroTitles(details: string): string[] {
+  const seen = new Set<string>();
+  const candidates = details
+    .split(",")
+    .map((part) => part.replace(/^[A-Z0-9]+:/i, "").trim())
+    .filter(Boolean);
+  const scored = candidates
+    .map((title) => ({ title, score: scoreMoneyDjMacroTitle(title) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, "zh-Hant"));
+  const selected: string[] = [];
+  for (const item of scored) {
+    const key = normalizeText(item.title);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    selected.push(item.title);
+    if (selected.length >= 3) break;
+  }
+  return selected;
+}
+
+function scoreMoneyDjMacroTitle(title: string): number {
+  const text = title.toLowerCase();
+  if (/消費者物價|核心cpi|consumer price|cpi/.test(text)) return 100;
+  if (/生產者物價|ppi/.test(text)) return 96;
+  if (/非農業就業|失業率|平均每小時工資|payroll|unemployment/.test(text)) return 94;
+  if (/零售額|retail/.test(text)) return 90;
+  if (/個人所得|個人支出|pce/.test(text)) return 88;
+  if (/ism|採購經理人/.test(text)) return 84;
+  if (/房屋開工|建築許可/.test(text)) return 80;
+  if (/工業生產|產能利用率/.test(text)) return 78;
+  if (/耐久財|工廠訂單/.test(text)) return 76;
+  if (/首次申請失業救濟|連續申請失業救濟/.test(text)) return 74;
+  if (/消費者信心|密西根大學信心/.test(text)) return 72;
+  if (/貿易收支|出口|進口/.test(text)) return 70;
+  if (/房貸|原油|天然氣|政府收支|m1|m2/.test(text)) return 48;
+  return 40;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[“”"']/g, "")
+    .trim();
+}
+
+function dedupeMacroCalendar(items: Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }>): Array<{ dateLabel: string; timeLabel: string; title: string; sourceUrl: string }> {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.dateLabel}|${normalizeText(item.title)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function compareMacroCalendarEntries(
+  a: { dateLabel: string; timeLabel: string; title: string },
+  b: { dateLabel: string; timeLabel: string; title: string },
+): number {
+  const dateScore = parseMacroCalendarSortKey(a.dateLabel, a.timeLabel) - parseMacroCalendarSortKey(b.dateLabel, b.timeLabel);
+  if (dateScore !== 0) return dateScore;
+  return scoreMoneyDjMacroTitle(b.title) - scoreMoneyDjMacroTitle(a.title);
+}
+
+function parseMacroCalendarSortKey(dateLabel: string, timeLabel: string): number {
+  const monthDay = /^(\d{1,2})\/(\d{1,2})$/.exec(dateLabel.trim());
+  if (monthDay) {
+    const year = new Date().getUTCFullYear();
+    return Date.UTC(year, Number(monthDay[1]) - 1, Number(monthDay[2]), 12);
+  }
+  const parsed = Date.parse(`${dateLabel} ${timeLabel}`.trim());
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 }
 
 async function fetchQuoteSet(configs: QuoteConfig[], reportDate: string, env: Env): Promise<QuoteSnapshot[]> {
