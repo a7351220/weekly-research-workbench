@@ -1822,6 +1822,15 @@ function parseCalendarDateParts(value: string): { month: string; day: string; ti
     };
   }
 
+  const slash = value.match(/^(\d{1,2})\/(\d{1,2})(?:\s+(.*))?$/);
+  if (slash) {
+    return {
+      month: `${Number(slash[1])}月`,
+      day: String(Number(slash[2])).padStart(2, "0"),
+      time: slash[3]?.trim() || "ALL DAY",
+    };
+  }
+
   const english = value.match(/^([A-Za-z]+)\s+(\d{1,2})(?:\s+(.*))?$/);
   if (english) {
     return {
