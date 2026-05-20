@@ -1303,6 +1303,13 @@ async function fetchHistoricalQuoteSnapshot(config: QuoteConfig, reportDate: str
     }
   }
 
+  if (config.key === "us10y") {
+    const fredQuote = await fetchFredSeriesQuoteSnapshot(config, reportDate, "DGS10");
+    if (fredQuote.price !== null) {
+      return fredQuote;
+    }
+  }
+
   const startDate = addUtcDays(reportDate, -10);
   const endDate = addUtcDays(reportDate, 1);
   const period1 = Math.floor(Date.parse(`${startDate}T00:00:00Z`) / 1000);
@@ -1343,6 +1350,55 @@ async function fetchHistoricalQuoteSnapshot(config: QuoteConfig, reportDate: str
   }
 
   return emptyQuote(config);
+}
+
+async function fetchFredSeriesQuoteSnapshot(config: QuoteConfig, reportDate: string, seriesId: string): Promise<QuoteSnapshot> {
+  const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}`;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "user-agent": "us-daily-market-report/1.0",
+        accept: "text/csv,text/plain,*/*",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`fred series ${seriesId} failed: ${response.status}`);
+    }
+    const csv = await response.text();
+    const rows = csv
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [date, rawValue] = line.split(",", 2);
+        const value = rawValue && rawValue !== "." ? Number(rawValue) : null;
+        return {
+          date: date?.trim() ?? "",
+          close: typeof value === "number" && Number.isFinite(value) ? value : null,
+        };
+      })
+      .filter((row) => row.close !== null && row.date <= reportDate);
+    if (rows.length < 2) {
+      throw new Error(`fred series ${seriesId} missing history`);
+    }
+    const current = rows[rows.length - 1];
+    const previous = rows[rows.length - 2];
+    return finalizeQuote(
+      config,
+      previous.close,
+      current.close,
+      null,
+      null,
+      null,
+      current.date,
+      "FRED DGS10 daily yield",
+      rows.slice(-10).map((row) => ({ date: row.date, close: row.close! })),
+      `https://fred.stlouisfed.org/series/${encodeURIComponent(seriesId)}`,
+    );
+  } catch {
+    return emptyQuote(config);
+  }
 }
 
 function parseYahooHistoricalQuote(
